@@ -1,0 +1,12 @@
+# The gateway holds the Anthropic key and has no auth, so only the Substrate egress gateway (which carries the
+# sandbox's model traffic) may reach it. Nothing else in the cluster needs the LLM.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: gateway-ingress, namespace: agentgateway}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ate-system}}
+    ports: [{port: 4000, protocol: TCP}]

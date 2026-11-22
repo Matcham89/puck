@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% from "_time.html" import when %}{% block body %}
+<h2>{{ job.title or job.instruction[:80] }}</h2>
+<p class="s-{{ job.css }}"><b>{{ job.label }}</b> · repo: {{ job.repo }} · branch: <code>{{ job.branch }}</code>{% if job.ticket_key %} · ticket: {{ job.ticket_key }}{% endif %}
+ · attempts: {{ job.attempts or '-' }}{% if job.dry_run == True or job.dry_run == 'True' %} · <b>dry run</b>{% endif %}</p>
+<p><small>Triggered {{ when(job.created_at) }} · last update {{ when(job.updated_at) }}</small></p>
+<div>{% set ns = namespace(seen=false) %}{% for s in stages %}
+<span class="stage {% if s == job.stage %}cur{% elif not ns.seen %}done{% endif %}">{{ s }}</span>
+{% if s == job.stage %}{% set ns.seen = true %}{% endif %}{% endfor %}</div>
+<pre>{{ job.instruction }}</pre>
+{% if job.pr_url %}<p>Draft PR: <a href="{{ job.pr_url }}">{{ job.pr_url }}</a></p>{% endif %}
+{% if job.status == 'failed' %}<h3>Error</h3><pre>{{ job.error }}</pre>
+<form method="post" action="/ui/jobs/{{ job.id }}/retry"><button>Retry</button> <small class="muted">(restores the last upload in a fresh session; only what the checks reported is fixed)</small></form>{% endif %}
+{% if subs %}<h3>Validator results</h3>
+<table><tr><th>Time</th><th>Result</th><th>Report</th></tr>{% for s in subs %}<tr><td>{{ s.t }} UTC</td><td class="{{ 'pass' if s.ok else 'fail' }}">{{ 'PASS' if s.ok else 'FAIL' }}</td><td><pre style="margin:0">{{ s.msg }}</pre></td></tr>{% endfor %}</table>{% endif %}
+<details open><summary>Event log</summary>
+<pre id="log" {% if live %}hx-get="/ui/jobs/{{ job.id }}/events?live=1" hx-trigger="every 2s" hx-swap="innerHTML"{% endif %}>{% include "_events.html" %}</pre></details>
+{% endblock %}

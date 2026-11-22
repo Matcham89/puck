@@ -1,0 +1,41 @@
+{
+  "puck": {
+    "repo": "OWNER/puck",
+    "base_branch": "main",
+    "allowed_paths": [
+      "agent/skills/",
+      "agent/cards/"
+    ],
+    "owner": "my-team",
+    "lint": [
+      "json",
+      "yaml",
+      "shell"
+    ],
+    "autofix": []
+  },
+  "my-service": {
+    "repo": "OWNER/REPO",
+    "base_branch": "main",
+    "allowed_paths": [
+      "docs/",
+      "README.md"
+    ],
+    "owner": "my-team",
+    "lint": [
+      "json",
+      "yaml",
+      "shell"
+    ],
+    "autofix": [],
+    "jira": {
+      "project": "ABC",
+      "components": [
+        "my-component"
+      ],
+      "trigger_labels": [
+        "ai-agent"
+      ]
+    }
+  }
+}

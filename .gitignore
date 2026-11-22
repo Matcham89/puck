@@ -1,0 +1,6 @@
+.env
+secrets/
+vendor/
+.idea/
+__pycache__/
+deployment/kubernetes/app/catalog.json

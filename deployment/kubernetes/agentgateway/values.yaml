@@ -1,0 +1,41 @@
+# Agent Gateway, standalone chart (not the controller). In-cluster replacement for the process on the Mac.
+# It is the only holder of the Anthropic key (a Secret mounted as a file); the agent sandbox never sees it.
+fullnameOverride: agentgateway
+replicaCount: 1
+mode: readonly
+image: {registry: ghcr.io, repository: agentgateway/agentgateway, tag: v1.7.0}
+gateway:
+  service: {type: ClusterIP}          # port 80 -> 4000, reachable only inside the cluster
+podSecurityContext: {seccompProfile: {type: RuntimeDefault}}
+resources: {requests: {cpu: 50m, memory: 96Mi}, limits: {memory: 256Mi}}
+extraVolumes:
+- {name: anthropic-key, secret: {secretName: anthropic-api-key, defaultMode: 0444}}
+extraVolumeMounts:
+- {name: anthropic-key, mountPath: /var/run/secrets/anthropic, readOnly: true}
+config:
+  gateways:
+    default: {port: 4000}
+  llm:
+    gateways: default
+    providers:
+    - provider: anthropic
+      name: event-driven-ai
+      params:
+        apiKey:
+          file: /var/run/secrets/anthropic/api_key
+    policies:
+      guardrails:                      # mask credentials that appear in prompts or tool output
+        request:
+        - scope: [systemPrompt, messages, toolOutput]
+          regex:
+            action: mask
+            rules:
+            - pattern: 'sk-ant-[A-Za-z0-9_-]{20,}'
+            - pattern: 'ghp_[A-Za-z0-9]{36}'
+            - pattern: 'github_pat_[A-Za-z0-9_]{20,}'
+            - pattern: '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+    models:                            # Anthropic only; no catch-all route, so any other model is a 404
+    - name: event-driven-ai/*
+      provider: {reference: event-driven-ai}
+      transformation:
+        model: llmRequest.model.stripPrefix("event-driven-ai/")

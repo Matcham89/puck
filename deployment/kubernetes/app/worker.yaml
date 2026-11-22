@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: worker, namespace: eda, labels: {app: worker}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: worker}}
+  template:
+    metadata: {labels: {app: worker}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: worker
+        image: localhost:5001/eda-services:dev
+        imagePullPolicy: Always
+        args: ["worker"]
+        env:
+        - {name: HOME, value: /tmp}
+        - {name: REDIS_URL, value: "redis://redis:6379/0"}
+        - {name: GATE_URL, value: "http://gate:8080"}
+        - {name: A2A_URL, value: "http://kagent-controller.kagent.svc:8083/agents/kagent/sre-agent"}
+        - {name: JIRA_BASE_URL, value: "http://jira-sim:8080"}   # real Jira: https://<site>.atlassian.net, plus a jira-api secret with the Authorization header
+        securityContext: {runAsNonRoot: true, runAsUser: 10001, readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+        resources: {requests: {cpu: 20m, memory: 64Mi}, limits: {memory: 512Mi}}
+        volumeMounts:
+        - {name: tmp, mountPath: /tmp}
+        - {name: catalog, mountPath: /etc/eda, readOnly: true}
+        - {name: publish-key, mountPath: /run/secrets/publish, readOnly: true}
+      volumes:
+      - {name: tmp, emptyDir: {sizeLimit: 512Mi}}
+      - {name: catalog, configMap: {name: eda-catalog}}
+      - {name: publish-key, secret: {secretName: publish-key}}

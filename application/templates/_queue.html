@@ -1,0 +1,6 @@
+{% if q %}
+<p><b>Queue</b>: waiting {{ q.depth }} · running {{ q.running }}</p>
+{% if q.failed %}<div class="box"><b>Failed</b> (retries exhausted; a retry restores the last upload and fixes only what the checks reported)
+<table>{% for d in q.failed %}<tr><td><a href="/ui/jobs/{{ d.id }}">{{ d.title }}</a><br><small>{{ (d.error or '')[:160] }}</small></td>
+<td><form method="post" action="/ui/jobs/{{ d.id }}/retry" style="display:inline"><button>Retry</button></form></td></tr>{% endfor %}</table></div>{% endif %}
+{% endif %}

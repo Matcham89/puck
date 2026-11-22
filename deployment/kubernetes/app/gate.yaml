@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: gate, namespace: eda, labels: {app: gate}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: gate}}
+  template:
+    metadata: {labels: {app: gate}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: gate
+        image: localhost:5001/eda-services:dev
+        imagePullPolicy: Always
+        args: ["gate"]
+        env:
+        - {name: HOME, value: /tmp}
+        - {name: REDIS_URL, value: "redis://redis:6379/0"}
+        securityContext: {runAsNonRoot: true, runAsUser: 10001, readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+        resources: {requests: {cpu: 20m, memory: 128Mi}, limits: {memory: 512Mi}}
+        volumeMounts:
+        - {name: tmp, mountPath: /tmp}
+        - {name: catalog, mountPath: /etc/eda, readOnly: true}
+        - {name: git-token, mountPath: /run/secrets/git, readOnly: true}
+        - {name: publish-key, mountPath: /run/secrets/publish, readOnly: true}
+        - {name: data, mountPath: /data}
+      volumes:
+      - {name: tmp, emptyDir: {sizeLimit: 512Mi}}
+      - {name: catalog, configMap: {name: eda-catalog}}
+      - {name: git-token, secret: {secretName: git-token}}
+      - {name: publish-key, secret: {secretName: publish-key}}
+      - {name: data, emptyDir: {sizeLimit: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: gate, namespace: eda}
+spec: {selector: {app: gate}, ports: [{port: 8080, targetPort: 8080}]}

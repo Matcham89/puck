@@ -1,0 +1,1 @@
+{% macro when(ts, only_time=False) %}{% if ts %}<time class="t" data-utc="{{ ts }}"{% if only_time %} data-only-time{% endif %} title="{{ ts }} (UTC)">{{ ts[11:19] if only_time else ts[:16].replace('T', ' ') + ' UTC' }}</time>{% endif %}{% endmacro %}

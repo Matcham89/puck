@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Event-Driven AI: Workflow, How It Works, Where It Runs</title>
+<style>
+  @page { size: A4 landscape; margin: 0; }
+  * { box-sizing: border-box; }
+  :root { --ink:#1b2430; --mute:#5b6675; --line:#d9dee7; --bg:#f5f7fa;
+          --blue:#3a6fd8; --purple:#6d4bd8; --teal:#0f8f9b; --green:#1f9d62; --amber:#b7791f; --red:#c0392b; }
+  body { margin:0; font-family:-apple-system,"Helvetica Neue",Arial,sans-serif; color:var(--ink); font-size:11.5px; line-height:1.45; }
+  .page { width:297mm; height:210mm; padding:11mm 12mm 9mm; page-break-after:always; position:relative; overflow:hidden; }
+  .page:last-child { page-break-after:auto; }
+  header { background:#16202e; color:#fff; border-radius:8px; padding:11px 16px; margin-bottom:10px; }
+  header h1 { margin:0; font-size:19px; letter-spacing:.1px; }
+  header p { margin:3px 0 0; color:#b9c4d4; font-size:11.5px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.6px; margin:10px 0 6px; padding-bottom:3px; border-bottom:1px solid var(--line); }
+  .row { display:flex; gap:10px; }
+  .box { flex:1; border:1.5px solid; border-radius:8px; padding:9px 11px; background:#fff; position:relative; }
+  .box h3 { margin:0 0 1px; font-size:13px; }
+  .tag { display:inline-block; font-size:9px; font-weight:700; letter-spacing:.5px; padding:1px 6px; border-radius:4px; margin-bottom:4px; }
+  .box ul { margin:5px 0 0; padding-left:15px; }
+  .box li { margin:1px 0; }
+  .b1{border-color:var(--blue)} .b1 .tag{background:#e6eefc;color:var(--blue)}
+  .b2{border-color:var(--purple)} .b2 .tag{background:#eee9fb;color:var(--purple)}
+  .b3{border-color:var(--teal)} .b3 .tag{background:#e2f4f6;color:var(--teal)}
+  .b4{border-color:var(--green)} .b4 .tag{background:#e3f5ec;color:var(--green)}
+  .arrow { width:30px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:9px; color:var(--mute); text-align:center; flex:none; }
+  .arrow b { font-size:20px; color:var(--ink); line-height:1; }
+  .loop { margin:8px 0 0; border:1.5px dashed var(--red); border-radius:8px; padding:6px 11px; color:#7a2a20; background:#fdf3f1; font-size:11px; }
+  code { font-family:"SF Mono",Menlo,monospace; font-size:10px; background:#eef1f5; border-radius:3px; padding:0 3px; }
+  table { border-collapse:collapse; width:100%; font-size:11px; }
+  th { background:#16202e; color:#fff; text-align:left; padding:5px 8px; font-weight:600; }
+  td { padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg); }
+  .steps { counter-reset:s; list-style:none; margin:0; padding:0; }
+  .steps li { counter-increment:s; position:relative; padding:0 0 4px 28px; }
+  .steps li::before { content:counter(s); position:absolute; left:0; top:0; width:20px; height:20px; border-radius:50%; background:var(--ink); color:#fff; font-weight:700; font-size:11px; text-align:center; line-height:20px; }
+  .two { display:flex; gap:14px; } .two > div { flex:1; }
+  .good { color:var(--green); font-weight:700; } .warn { color:var(--amber); font-weight:700; }
+  .note { background:var(--bg); border-radius:6px; padding:6px 10px; margin-top:6px; color:var(--mute); }
+  .host { border:2px solid #9aa6b8; border-radius:10px; padding:8px 10px 10px; background:#fbfcfd; }
+  .host > .lbl, .ns > .lbl { font-size:9.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--mute); margin-bottom:5px; }
+  .cluster { border:2px solid var(--teal); border-radius:10px; padding:7px 9px 9px; background:#f3fafb; margin-top:6px; }
+  .nsrow { display:flex; gap:8px; }
+  .ns { flex:1; border:1.5px solid var(--line); border-radius:8px; padding:6px 8px; background:#fff; }
+  .chip { display:inline-block; border:1px solid var(--line); background:#fff; border-radius:5px; padding:1px 6px; margin:1px 2px 1px 0; font-size:10.5px; }
+  .chip.hot { border-color:var(--purple); background:#f1edfd; } .chip.gate { border-color:var(--teal); background:#e6f6f8; } .chip.pub { border-color:var(--green); background:#e6f6ee; }
+  .foot { position:absolute; left:12mm; right:12mm; bottom:5mm; color:var(--mute); font-size:9.5px; display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+
+<!-- ============================ PAGE 1 ============================ -->
+<section class="page">
+  <header>
+    <h1>Event-Driven AI: workflow, how it works, where it runs</h1>
+    <p>An event becomes a reviewed draft PR. The LLM does only the judgment work; validation, publishing and routing are deterministic and cost no tokens.</p>
+  </header>
+
+  <h2>1. End-to-end workflow (three boxes, as in the blueprint)</h2>
+  <div class="row">
+    <div class="box b1">
+      <span class="tag">TRIGGER + QUEUE · NO LLM</span>
+      <h3>Event, intake, queue, worker</h3>
+      <ul>
+        <li>A <b>Jira webhook</b> (<code>/webhooks/jira</code>, HMAC-verified) or <code>POST /events</code></li>
+        <li><b>Intake</b> parses the ticket (rich text to plain text), needs the trigger label, drops duplicates, and maps project + component to a <b>service catalog</b> entry</li>
+        <li>Bad input gets a 400; good input becomes <b>canonical JSON</b></li>
+        <li>Job goes on a <b>Redis</b> queue; a small <b>web UI</b> (same pod) shows queue, stages, validator results and a live log</li>
+        <li><b>Worker</b> pops it, fetches the repo brief, asks kagent</li>
+      </ul>
+    </div>
+    <div class="arrow"><b>→</b>A2A 1.0<br>job + brief</div>
+    <div class="box b2">
+      <span class="tag">BOX A · AGENT SANDBOX · LLM</span>
+      <h3>kagent Agent on Agent Substrate</h3>
+      <ul>
+        <li>Claude Code harness in a <b>gVisor</b> sandbox</li>
+        <li>Downloads a repo <b>snapshot</b> from the gate</li>
+        <li>Decides <b>where</b> the change belongs, writes the files and the PR text</li>
+        <li>Uploads its changes for validation</li>
+        <li><b>No credentials, no git, no internet.</b> Reachable: model gateway and the gate only</li>
+      </ul>
+    </div>
+    <div class="arrow"><b>→</b>submit<br>changes</div>
+    <div class="box b3">
+      <span class="tag">BOX B · VALIDATOR · $0 · NO LLM</span>
+      <h3>Gate: deterministic lint</h3>
+      <ul>
+        <li>Overlays the upload on a <b>fresh clone</b> of base</li>
+        <li>Rejects anything outside <b>allowed paths</b></li>
+        <li><b>Auto-fixes</b> formatting with no LLM (<code>terraform fmt</code>, changed files only)</li>
+        <li><b>Lints</b> only the changed files: JSON, YAML, shell, Helm, Kubernetes schemas, Terraform, tflint, plus the repo's own rules</li>
+        <li>Returns <b>only the failure text</b> (token scrubbed)</li>
+      </ul>
+    </div>
+    <div class="arrow"><b>→</b>pass<br>+ key</div>
+    <div class="box b4">
+      <span class="tag">BOX C · PUBLISHER · NO LLM · GIT WRITE</span>
+      <h3>Gate: publish</h3>
+      <ul>
+        <li>Only the <b>worker</b> may call it (key the agent never has)</li>
+        <li>Branch <code>learn/&lt;ticket&gt;</code>, chosen by code, never <code>main</code></li>
+        <li>Commit, push, open a <b>draft PR</b></li>
+        <li>PR URL comes back in the job status</li>
+      </ul>
+    </div>
+  </div>
+  <div class="loop"><b>↺ On any failure:</b> the worker starts a <b>fresh agent session</b> (clean context, same cached brief) with the exact errors and the branch name. The agent restores its last upload, fixes only what was reported, and resubmits: up to <b>3 attempts</b>. If it still fails the job is marked failed and nothing is published.</div>
+
+  <h2>2. What a run looks like</h2>
+  <table>
+    <tr><th style="width:15%">Stage</th><th style="width:38%">What happens</th><th>Example (job SRE-104, real run)</th></tr>
+    <tr><td><b>Event</b></td><td>Instruction + ticket key + service name posted to intake</td><td>"Record a troubleshooting skill for Helm OCI auth failures", service <code>my-service</code>, <code>SRE-104</code></td></tr>
+    <tr><td><b>Agent decision</b></td><td>Reads the repo brief, picks a plugin, writes the files</td><td>New plugin <code>dev-troubleshooting</code> with a <code>helm-oci-auth</code> skill, reasoning in the PR text</td></tr>
+    <tr><td><b>Gate</b></td><td>Lint passes or returns an error to fix</td><td>First attempt returned a validation error; second passed</td></tr>
+    <tr><td><b>Result</b></td><td>Draft PR on a <code>learn/*</code> branch; <code>main</code> never touched</td><td>Draft PR #9 on <code>OWNER/REPO</code>, 6 files, base <code>main</code></td></tr>
+  </table>
+  <div class="foot"><span>Event-Driven AI · workflow</span><span>1 / 3</span></div>
+</section>
+
+<!-- ============================ PAGE 2 ============================ -->
+<section class="page">
+  <header>
+    <h1>How it works: control, safety and cost</h1>
+    <p>Why the agent can be trusted with a repo it can't push to, and why each run costs cents.</p>
+  </header>
+
+  <div class="two">
+    <div>
+      <h2>Step by step</h2>
+      <ol class="steps">
+        <li><b>Event in.</b> A Jira webhook is signature-checked, parsed (ADF description to text), matched to a service by project and component, and only acted on when the trigger label is added. Redeliveries and a second trigger while a job runs are ignored. Bad input is rejected before anything is queued.</li>
+        <li><b>Queue.</b> The canonical job (repo, base branch, allowed paths, instruction) is stored in Redis and queued. The worker is the only consumer.</li>
+        <li><b>Brief first.</b> The worker asks the gate for a deterministic repo brief (plugin index, <code>tree</code>, the repo's own rules) and puts it at the top of the message, so it caches across jobs.</li>
+        <li><b>Agent run.</b> kagent starts the actor on Substrate (gVisor). The agent downloads a snapshot, edits files, writes <code>PR.md</code> (title + reasoning), and runs one submit script that uploads only the changed files.</li>
+        <li><b>Validation.</b> The gate overlays the upload on a fresh clone, auto-fixes formatting, then lints the changed files. Failures return as text to the agent's own turn; if the turn ends unvalidated, the worker retries in a fresh session with the errors and branch name.</li>
+        <li><b>Publish.</b> The worker, holding the publish key, tells the gate to push the branch and open the draft PR.</li>
+        <li><b>Done.</b> The job status holds the PR URL; kagent suspends the idle sandbox, and a retry or new job starts clean.</li>
+      </ol>
+      <div class="note"><b>Dry run:</b> an event with <code>"dry_run": true</code> stops after step 5, so cost and behaviour can be measured without opening a PR.</div>
+    </div>
+    <div>
+      <h2>Security model</h2>
+      <table>
+        <tr><th style="width:34%">Risk</th><th>Control</th></tr>
+        <tr><td>Agent leaks a token</td><td>It never has one. The git token lives only in the gate pod; the LLM key lives only in the in-cluster gateway, which only the sandbox's egress path may reach.</td></tr>
+        <tr><td>Agent pushes or opens PRs itself</td><td>No git, no network except two allowlisted origins. Publish needs a key only the worker holds.</td></tr>
+        <tr><td>Writes to <code>main</code></td><td>Branch name is chosen by code (<code>learn/*</code>), explicit refspec, draft only.</td></tr>
+        <tr><td>Touches CI or unrelated files</td><td>Allowed paths from the catalog; anything else is rejected, unchanged files ignored.</td></tr>
+        <tr><td>Hostile ticket text (prompt injection)</td><td>Capped, control characters stripped, labelled as data. The real defence is containment: no credentials, an egress allowlist, a gate, draft PRs.</td></tr>
+        <tr><td>Token in error text</td><td>Every message returned to the agent is scrubbed.</td></tr>
+        <tr><td>Bad change slips through</td><td>Deterministic lint (a per-service profile in the catalog), then human review of a draft PR.</td></tr>
+      </table>
+      <div class="note"><span class="warn">Limit:</span> egress rules work per origin, not per path, so the gate's publish route is protected by the worker-only key, not the network.</div>
+    </div>
+  </div>
+
+  <h2>Token economics: why a harness and not a graph orchestrator</h2>
+  <div class="two">
+    <div>
+      <table>
+        <tr><th></th><th>First run (SRE-104)</th><th>After brief + fixes (SRE-107)</th></tr>
+        <tr><td>LLM calls</td><td>18</td><td><b class="good">12</b></td></tr>
+        <tr><td>Output tokens</td><td>about 11,400</td><td><b class="good">about 5,100</b></td></tr>
+        <tr><td>Cost</td><td>about $0.27</td><td><b class="good">about $0.14</b></td></tr>
+        <tr><td>Attempts to pass validation</td><td>2</td><td><b class="good">1</b></td></tr>
+      </table>
+    </div>
+    <div>
+      <ul style="margin:0;padding-left:16px">
+        <li><b>~99% of input is cache reads</b>: a static prefix, the brief first, the job last.</li>
+        <li><b>Deterministic work costs nothing</b>: routing, lint, publish run as code.</li>
+        <li><b>Targeted tools</b>: <code>tree</code>, <code>rg -n</code>, <code>sed -n</code> instead of whole-file reads.</li>
+        <li>The biggest saving was fixing a prompt bug that made every first upload fail.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note">Single runs, not a benchmark. Floor: Claude Code's own ~27k-token prefix on each call, which prompt caching makes cheap.</div>
+  <div class="foot"><span>Event-Driven AI · how it works</span><span>2 / 3</span></div>
+</section>
+
+<!-- ============================ PAGE 3 ============================ -->
+<section class="page">
+  <header>
+    <h1>Where it runs, what's proven, what's next</h1>
+    <p>Everything runs locally on one Mac: a Colima Docker VM hosts a dedicated kind cluster.</p>
+  </header>
+
+  <div class="two" style="gap:12px">
+    <div style="flex:1.45">
+      <h2>Where each part lives</h2>
+      <div class="host">
+        <div class="lbl">Your Mac · Colima Docker VM (4 CPU, 6 GB)</div>
+        <span class="chip">kind-registry :5001</span>
+        <span class="chip gate"><code>secrets/git_token</code> (becomes a Secret in the gate only)</span>
+        <span class="chip hot"><code>secrets/anthropic_api_key</code> (becomes a Secret in the gateway only)</span>
+        <div class="cluster">
+          <div class="lbl" style="font-size:9.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--teal);margin-bottom:5px">kind cluster <code>event-driven-ai</code> · Kubernetes v1.37 · one node</div>
+          <div class="nsrow">
+            <div class="ns">
+              <div class="lbl">ns: eda (ours)</div>
+              <span class="chip">redis</span><span class="chip">intake + catalog + UI</span><span class="chip">worker</span><span class="chip gate">gate (B + C)</span>
+            </div>
+            <div class="ns">
+              <div class="lbl">ns: kagent</div>
+              <span class="chip hot">sre-agent</span><span class="chip">controller</span><span class="chip">worker pool</span><span class="chip">postgresql</span>
+              <div style="color:var(--mute);font-size:10px;margin-top:2px">ModelConfig, EgressPolicy, Agent (<code>claude-default</code> harness)</div>
+            </div>
+            <div class="ns">
+              <div class="lbl">ns: agentgateway</div>
+              <span class="chip hot">agentgateway 1.7.0</span>
+              <div style="color:var(--mute);font-size:10px;margin-top:2px">standalone Helm chart · Anthropic-only <code>event-driven-ai/</code> route · key as a mounted Secret · ingress only from <code>ate-system</code> (NetworkPolicy)</div>
+            </div>
+            <div class="ns">
+              <div class="lbl">ns: ate-system (Substrate)</div>
+              <span class="chip">api server</span><span class="chip">controller</span><span class="chip">atelet</span><span class="chip">router</span><span class="chip">egress gateway</span><span class="chip">idp</span><span class="chip">rustfs</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note" style="margin-top:6px"><b>Reaches out to:</b> GitHub only through the gate (clone, push, draft PR); api.anthropic.com only through the gateway. The sandbox reaches the gateway and the gate, nothing else. Nothing depends on a process on your Mac.</div>
+
+      <h2>Versions and commands</h2>
+      <table>
+        <tr><td style="width:33%"><b>kagent</b> 1.0.1 · <b>Agent Substrate</b> 1.0.0</td><td>Installed by Helm through the kagent CLI (<code>k8s/up.sh</code>)</td></tr>
+        <tr><td><b>A2A</b> 1.0 (JSON-RPC <code>SendMessage</code>)</td><td>Worker to kagent; needs header <code>A2A-Version: 1.0</code></td></tr>
+        <tr><td><b>Start / stop</b></td><td><code>sh k8s/up.sh</code> builds everything from nothing (~6 min) · <code>sh k8s/down.sh</code> removes it</td></tr>
+        <tr><td><b>Measure</b></td><td><code>k8s/job-cost.sh &lt;job-id&gt;</code> · events may set <code>dry_run</code></td></tr>
+      </table>
+    </div>
+
+    <div style="flex:1">
+      <h2>What's proven</h2>
+      <ul style="margin:0;padding-left:16px">
+        <li class="good">Event to draft PR, hands-off, on the real repo (PRs #8, #9)</li>
+        <li class="good">Simulated Jira: signed webhook, parse, queue, agent, comment back (dedupe, in-flight and trigger rules tested)</li>
+        <li class="good">Cluster rebuilt from nothing with one script, first try</li>
+        <li class="good">Sandbox reaches only the gateway and the gate</li>
+        <li class="good">Lint failures loop back and recover (shellcheck caught, fixed, re-validated)</li>
+        <li class="good">Fresh-context retries, tested with a stubbed agent and gate</li>
+        <li class="good">Gateway in the cluster; a NetworkPolicy stops other pods (the gate holds the git token) from using the LLM key</li>
+        <li class="good">E2E suite: 22 checks (<code>k8s/tests/e2e.py</code>, dry runs, ~$0.05 per agent job)</li>
+        <li class="good">Cost down about 47% after the brief and fixes</li>
+      </ul>
+      <h2>Not yet</h2>
+      <ul style="margin:0;padding-left:16px">
+        <li><span class="warn">Infra repos</span>: the Terraform/Helm/Kubernetes lint is tested on fixtures, not yet on a real infra repo</li>
+        <li><span class="warn">Skills from git</span>: the agent's rules are inline; central skills could load on demand</li>
+        <li><span class="warn">Worker</span> connect-retry when Redis starts late</li>
+        <li><span class="warn">Other clusters</span>: the same manifests should work wherever Substrate and kagent run; only this kind setup is tested</li>
+      </ul>
+      <h2>Next</h2>
+      <div class="note" style="margin-top:0">
+        <ul style="margin:0;padding-left:15px">
+          <li>Point the Jira webhook at intake and <code>JIRA_BASE_URL</code> at real Jira (needs an API credential Secret); the simulator already exercises the same path</li>
+          <li>Add a first infrastructure repo to the catalog to try the Terraform / Helm / Kubernetes lint for real</li>
+          <li>Open item: the gateway has no auth of its own; the NetworkPolicy is its only guard</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Event-Driven AI · where it runs</span><span>3 / 3</span></div>
+</section>
+
+</body>
+</html>

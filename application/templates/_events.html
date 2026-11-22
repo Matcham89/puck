@@ -1,0 +1,2 @@
+{% from "_time.html" import when %}{% for e in events %}<span class="lvl-{{ e.level }}">{{ when(e.ts, True) }} [{{ e.stage }}] {{ e.message }}</span>
+{% endfor %}

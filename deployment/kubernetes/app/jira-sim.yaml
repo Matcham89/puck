@@ -1,0 +1,29 @@
+# Stand-in for Jira's comment API so the write-back can be tested. Replace JIRA_BASE_URL on the worker to point at real Jira.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: jira-sim, namespace: eda, labels: {app: jira-sim}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: jira-sim}}
+  template:
+    metadata: {labels: {app: jira-sim}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: jira-sim
+        image: localhost:5001/eda-services:dev
+        imagePullPolicy: Always
+        args: ["jira-sim"]
+        env:
+        - {name: HOME, value: /tmp}
+        - {name: REDIS_URL, value: "redis://redis:6379/0"}
+        securityContext: {runAsNonRoot: true, runAsUser: 10001, readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+        resources: {requests: {cpu: 10m, memory: 48Mi}, limits: {memory: 128Mi}}
+        volumeMounts: [{name: tmp, mountPath: /tmp}, {name: catalog, mountPath: /etc/eda, readOnly: true}]
+      volumes: [{name: tmp, emptyDir: {sizeLimit: 64Mi}}, {name: catalog, configMap: {name: eda-catalog}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: jira-sim, namespace: eda}
+spec: {selector: {app: jira-sim}, ports: [{port: 8080, targetPort: 8080}]}

@@ -1,0 +1,3 @@
+# kagent chart overrides for the 4-CPU kind node: the UI is not needed for the headless flow.
+ui:
+  replicas: 0

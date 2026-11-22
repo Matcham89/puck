@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: intake, namespace: eda, labels: {app: intake}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: intake}}
+  template:
+    metadata: {labels: {app: intake}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: intake
+        image: localhost:5001/eda-services:dev
+        imagePullPolicy: Always
+        args: ["intake"]
+        env:
+        - {name: HOME, value: /tmp}
+        - {name: REDIS_URL, value: "redis://redis:6379/0"}
+        securityContext: {runAsNonRoot: true, runAsUser: 10001, readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+        resources: {requests: {cpu: 20m, memory: 64Mi}, limits: {memory: 512Mi}}
+        volumeMounts:
+        - {name: tmp, mountPath: /tmp}
+        - {name: catalog, mountPath: /etc/eda, readOnly: true}
+        - {name: jira-webhook, mountPath: /run/secrets/jira, readOnly: true}
+      volumes:
+      - {name: tmp, emptyDir: {sizeLimit: 512Mi}}
+      - {name: catalog, configMap: {name: eda-catalog}}
+      - {name: jira-webhook, secret: {secretName: jira-webhook}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: intake, namespace: eda}
+spec: {selector: {app: intake}, ports: [{port: 8080, targetPort: 8080}]}
