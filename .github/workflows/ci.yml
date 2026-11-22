@@ -1,4 +1,4 @@
-# Lint, test, build and push the services image. Repo-agnostic: the image name defaults to this repository, the registry to GHCR,
+# Lint, test, build and push the services image, and keep a release PR (changelog + version) from Conventional Commits. Repo-agnostic: the image name defaults to this repository, the registry to GHCR,
 # and GHCR needs no extra secret (the built-in GITHUB_TOKEN). To push elsewhere, see docs/getting-started.md.
 name: ci
 on:
@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}   # never cancel a main run halfway through a release
 
 jobs:
   lint:
@@ -25,9 +25,19 @@ jobs:
       - name: Python compiles
         run: python3 -m compileall -q application tests
       - name: JSON
-        run: jq empty deployment/kubernetes/app/catalog.example.json
+        run: jq empty deployment/kubernetes/app/catalog.example.json release-please-config.json .release-please-manifest.json
       - name: YAML
         run: pip install --quiet yamllint && yamllint deployment/kubernetes .github
+
+  pr-title:                # squash merges use the PR title as the commit message, and that is what drives releases
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'learn/')   # the agent's own draft PRs are exempt
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "$TITLE" | grep -Eq '^(feat|fix|docs|chore|ci|build|test|refactor|perf|style|revert)(\([^)]+\))?!?: .+' \
+            || { echo "PR title must be a Conventional Commit, e.g. 'feat: add x', 'fix(gate): y', 'feat!: breaking change'. Got: $TITLE"; exit 1; }
 
   test:
     runs-on: ubuntu-latest
@@ -46,10 +56,27 @@ jobs:
       - name: Unit tests, inside the image
         run: sh application/tests/run.sh eda-services:test
 
-  push:
+  release-please:          # keeps a release PR open (version + CHANGELOG.md); merging it tags and publishes the GitHub Release
     needs: [lint, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@v5
+        with:
+          # GITHUB_TOKEN is enough, but PRs/tags it creates do not trigger other workflows; a PAT secret makes CI run on the release PR
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+  push:
+    needs: [lint, test, release-please]
+    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && needs.lint.result == 'success' && needs.test.result == 'success' && needs.release-please.result != 'failure' && github.event_name != 'pull_request' }}
     permissions:
       contents: read
       packages: write          # GHCR push with the built-in token
@@ -74,6 +101,7 @@ jobs:
             type=sha
             type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ needs.release-please.outputs.tag_name || 'unreleased' }},enable=${{ needs.release-please.outputs.release_created == 'true' }}
       - uses: docker/build-push-action@v7
         with:
           context: .

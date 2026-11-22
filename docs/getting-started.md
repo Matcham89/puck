@@ -26,6 +26,21 @@ Set these in Settings > Secrets and variables > Actions. All are optional; unset
 
 Use a token scoped to push to this one image only, and rotate it on a schedule.
 
+### Releases (release PR, from commit messages)
+Releases use [release-please](https://github.com/googleapis/release-please-action). On every push to `main` (after lint and test) it reads the Conventional Commits since the last release and keeps one **release PR** open: it bumps the version (`version.txt`) and updates `CHANGELOG.md`. **Merging that PR** creates the tag and the GitHub Release, and the same pipeline run pushes the image with that version tag (for example `v1.2.0`) next to `sha-<commit>` and `latest`.
+
+| Commit / PR title | Release |
+|---|---|
+| `feat: ...` | minor (`1.2.0` -> `1.3.0`) |
+| `fix: ...` | patch (`1.2.0` -> `1.2.1`) |
+| `feat!: ...`, `fix(scope)!: ...`, or a `BREAKING CHANGE:` footer | major (`1.2.0` -> `2.0.0`) |
+| `docs:`, `chore:`, `ci:`, `build:`, `test:`, `refactor:`, `style:` | none; `docs` and `chore` still appear in the changelog |
+
+- Starts from `0.0.0` (`.release-please-manifest.json`); nothing is released until the first `feat` or `fix` lands. Version rules for `0.x` follow release-please's defaults; tune them in `release-please-config.json`.
+- Squash merges use the **PR title** as the commit message, so PR titles must follow this format; the `pr-title` check enforces it. The agent's own `learn/*` draft PRs are exempt.
+- **One-time setting:** Settings > Actions > General > Workflow permissions > tick **Allow GitHub Actions to create and approve pull requests**.
+- The release PR and tag are created by `github-actions[bot]`, so it appears as a contributor. PRs and tags made with the default token do not trigger other workflows, so CI will not run on the release PR itself. To make it run, add a PAT (contents + pull requests write) as the `RELEASE_PLEASE_TOKEN` secret; the workflow uses it when present.
+
 ### Gates
 Pull requests never push. The push job needs `lint` and `test` to pass first. Fork PRs get no secrets, so they can lint and test but not push.
 

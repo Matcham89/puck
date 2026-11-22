@@ -49,7 +49,7 @@ sh deployment/kubernetes/up.sh       # local kind cluster
 | Simulate Jira | `python3 application/sim/jira.py create SRE-201 "Summary" "Description" --labels ai-agent,ai-dry-run` |
 
 ## Pipeline
-`.github/workflows/ci.yml` lints, tests, and pushes a multi-arch image to GHCR with no extra secrets (see getting-started). Seams: build `application/Dockerfile` (context = repo root), run the unit tests in it, lint `deployment/`. CD: `deployment/kubernetes/apply.sh`. Agent behaviour changes ship from `agent/` alone.
+`.github/workflows/ci.yml` lints, tests, pushes a multi-arch image to GHCR with no extra secrets, and keeps a release PR (version + `CHANGELOG.md`) from Conventional Commits via release-please: `feat` minor, `fix` patch, `feat!` major, `docs`/`chore` none; merging the PR tags the release. See getting-started. Seams: build `application/Dockerfile` (context = repo root), run the unit tests in it, lint `deployment/`. CD: `deployment/kubernetes/apply.sh`. Agent behaviour changes ship from `agent/` alone.
 
 ## Secrets
 `secrets/git_token` (fine-grained PAT on the target repos only), `secrets/anthropic_api_key` (held by the gateway), `secrets/publish_key` and `secrets/jira_webhook_secret` (generated on first apply).
