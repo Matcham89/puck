@@ -27,7 +27,7 @@ Set these in Settings > Secrets and variables > Actions. All are optional; unset
 Use a token scoped to push to this one image only, and rotate it on a schedule.
 
 ### Releases (release PR, from commit messages)
-Releases use [release-please](https://github.com/googleapis/release-please-action). On every push to `main` (after lint and test) it reads the Conventional Commits since the last release and keeps one **release PR** open: it bumps the version (`version.txt`) and updates `CHANGELOG.md`. **Merging that PR** creates the tag and the GitHub Release, and the same pipeline run pushes the image with that version tag (for example `v1.2.0`) next to `sha-<commit>` and `latest`.
+Releases use [release-please](https://github.com/googleapis/release-please-action). On every push to `main` (after lint and test) it reads the Conventional Commits since the last release and keeps one **release PR** open: it records the version in `.release-please-manifest.json` and updates `CHANGELOG.md`. **Merging that PR** creates the tag and the GitHub Release, and the same pipeline run pushes the image with that version tag (for example `v1.2.0`) next to `sha-<commit>` and `latest`.
 
 | Commit / PR title | Release |
 |---|---|
