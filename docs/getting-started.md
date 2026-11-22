@@ -36,7 +36,8 @@ Releases use [release-please](https://github.com/googleapis/release-please-actio
 | `feat!: ...`, `fix(scope)!: ...`, or a `BREAKING CHANGE:` footer | major (`1.2.0` -> `2.0.0`) |
 | `docs:`, `chore:`, `ci:`, `build:`, `test:`, `refactor:`, `style:` | none; `docs` and `chore` still appear in the changelog |
 
-- Starts from `0.0.0` (`.release-please-manifest.json`); nothing is released until the first `feat` or `fix` lands. Version rules for `0.x` follow release-please's defaults; tune them in `release-please-config.json`.
+- **Pre-GA:** the first release is pinned to `v0.1.0` (`initial-version`), and while the version is below 1.0 a breaking change bumps the **minor** version, not major (`bump-minor-pre-major`). Nothing is released until a `feat` or `fix` lands on `main`. To cut `v0.1.0` immediately, push a commit with the footer `Release-As: 0.1.0`.
+- **Going GA:** remove `initial-version` and `bump-minor-pre-major` from `release-please-config.json`, then release `1.0.0` with a `Release-As: 1.0.0` commit footer; breaking changes bump major from then on.
 - Squash merges use the **PR title** as the commit message, so PR titles must follow this format; the `pr-title` check enforces it. The agent's own `learn/*` draft PRs are exempt.
 - **One-time setting:** Settings > Actions > General > Workflow permissions > tick **Allow GitHub Actions to create and approve pull requests**.
 - The release PR and tag are created by `github-actions[bot]`, so it appears as a contributor. PRs and tags made with the default token do not trigger other workflows, so CI will not run on the release PR itself. To make it run, add a PAT (contents + pull requests write) as the `RELEASE_PLEASE_TOKEN` secret; the workflow uses it when present.
