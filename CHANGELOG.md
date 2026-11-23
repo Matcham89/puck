@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/Matcham89/puck/compare/v0.1.0...v0.1.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* run helm without stored registry credentials ([f06218f](https://github.com/Matcham89/puck/commit/f06218f79dd5d609e6d5749ff5fd4b86cc330f80))
+
 ## 0.1.0 (2026-11-22)
 
 
