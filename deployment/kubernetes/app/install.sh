@@ -14,3 +14,6 @@ kubectl $C -n eda create secret generic git-token --from-file=token=secrets/git_
 [ -f secrets/jira_webhook_secret ] || { umask 077; head -c 24 /dev/urandom | base64 > secrets/jira_webhook_secret; }
 kubectl $C -n eda create secret generic jira-webhook --from-file=secret=secrets/jira_webhook_secret --dry-run=client -o yaml | kubectl $C apply -f -
 kubectl $C -n eda create secret generic publish-key --from-file=key=secrets/publish_key --dry-run=client -o yaml | kubectl $C apply -f -
+# The services read the catalog at startup, so restart them to pick up a changed catalog or a rebuilt image.
+kubectl $C -n eda rollout restart deploy/gate deploy/intake deploy/worker >/dev/null
+kubectl $C -n eda rollout status deploy/gate deploy/intake deploy/worker --timeout=180s

@@ -16,6 +16,7 @@ Note: the kagent docs page I checked is the 0.10.x version; this repo pins kagen
 |---|---|
 | `app/` | namespace `eda`: `redis`, `gate`, `intake`, `worker` (and `jira-sim`, a dev-only Jira stand-in), plus the target `catalog.json` |
 | `kagent/agent.yaml` | the agent: `ModelConfig`, `EgressPolicy`, `Agent` in namespace `kagent` |
+| `agent/` (repo root) | the agent's rules, cards and skills. `kagent/agent.sh` packs them into the `agent-knowledge` ConfigMap, and the Agent's prompt includes it (kagent `promptTemplate` data sources). Merging a learning PR changes what new jobs know after the next `agent.sh` (or your GitOps sync); running sessions keep their revision. Native kagent skills are not used yet: per kagent's docs a `git` skill source leaves the agent not Ready, and an OCI skill needs an HTTPS registry the runtime trusts (a local plain-HTTP kind registry does not work) |
 
 ## Order and criteria
 Each step needs the one before it to be ready.
