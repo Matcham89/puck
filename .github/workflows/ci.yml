@@ -60,7 +60,7 @@ jobs:
 
   release-please:          # keeps a release PR open (version + CHANGELOG.md); merging it tags and publishes the GitHub Release
     needs: [lint, test]
-    if: github.ref == 'refs/heads/main'      # never on a PR (its ref is refs/pull/...) or a manual run on another branch
+    if: github.ref == 'refs/heads/main' && vars.RELEASES != 'off'   # never on a PR or another branch; a fork can opt out with the repo variable RELEASES=off
     runs-on: ubuntu-latest
     permissions:
       contents: write
