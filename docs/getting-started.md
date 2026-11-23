@@ -7,12 +7,12 @@ Two paths: A) CI for the image, B) deploy and run it against your target repos.
 
 ## A. CI pipeline (`.github/workflows/ci.yml`)
 
-On every pull request it runs **lint** (shellcheck, Python compile, JSON, YAML) and **test** (builds the image, runs all unit tests inside it). On pushes to `main` and `v*` tags it also **builds a multi-arch image (amd64 + arm64) and pushes it**.
+On every pull request, push to `main` and manual run it runs **lint** (shellcheck, Python compile, JSON, YAML) and **test** (builds the image, runs all unit tests inside it). On `main` it also **builds a multi-arch image (amd64 + arm64) and pushes it**.
 
 ### Zero-config setup (GitHub Container Registry)
 1. Fork or copy this repo to GitHub. The workflow names the image after the repo (`ghcr.io/<owner>/<repo>`), so nothing is hard-coded.
 2. Settings > Actions > General > Workflow permissions: allow **read and write** (the push job asks for `packages: write` using the built-in `GITHUB_TOKEN`; no secret to create).
-3. Push to `main`. The image appears under the repo's Packages tab. Tags: `sha-<commit>`, `latest` (default branch), and the tag name for `v*` tags.
+3. Push to `main`. The image appears under the repo's Packages tab. Tags: `sha-<commit>`, `latest`, and the release version (for example `v0.2.0`) on the run that cuts a release.
 
 ### Pushing somewhere else (Docker Hub, ECR, Artifactory, ...)
 Set these in Settings > Secrets and variables > Actions. All are optional; unset means GHCR.

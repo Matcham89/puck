@@ -1,10 +1,9 @@
 # Lint, test, build and push the services image, and keep a release PR (changelog + version) from Conventional Commits. Repo-agnostic: the image name defaults to this repository, the registry to GHCR,
 # and GHCR needs no extra secret (the built-in GITHUB_TOKEN). To push elsewhere, see docs/getting-started.md.
 name: ci
-on:
+on:                        # CI (lint, test) on pull requests, pushes to main and manual runs; releases and image pushes only when the ref is main
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -58,7 +57,7 @@ jobs:
 
   release-please:          # keeps a release PR open (version + CHANGELOG.md); merging it tags and publishes the GitHub Release
     needs: [lint, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'      # never on a PR (its ref is refs/pull/...) or a manual run on another branch
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -73,10 +72,10 @@ jobs:
           # GITHUB_TOKEN is enough, but PRs/tags it creates do not trigger other workflows; a PAT secret makes CI run on the release PR
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
-  push:
+  push:                    # image push: only when the ref is main (the release tag is added when release-please cut a release)
     needs: [lint, test, release-please]
     runs-on: ubuntu-latest
-    if: ${{ !cancelled() && needs.lint.result == 'success' && needs.test.result == 'success' && needs.release-please.result != 'failure' && github.event_name != 'pull_request' }}
+    if: ${{ !cancelled() && needs.lint.result == 'success' && needs.test.result == 'success' && needs.release-please.result != 'failure' && github.ref == 'refs/heads/main' }}
     permissions:
       contents: read
       packages: write          # GHCR push with the built-in token
@@ -99,7 +98,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
           tags: |
             type=sha
-            type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ needs.release-please.outputs.tag_name || 'unreleased' }},enable=${{ needs.release-please.outputs.release_created == 'true' }}
       - uses: docker/build-push-action@v7
