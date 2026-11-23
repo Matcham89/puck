@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/Matcham89/puck/compare/v0.2.0...v0.3.0) (2026-11-23)
+
+
+### Features
+
+* repo-agnostic brief for the agent ([8e73846](https://github.com/Matcham89/puck/commit/8e73846556636c5569f8c886a9b54c54856636ef))
+
 ## [0.2.0](https://github.com/Matcham89/puck/compare/v0.1.1...v0.2.0) (2026-11-23)
 
 
