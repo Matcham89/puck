@@ -1,7 +1,7 @@
 """Worker: pops jobs from Redis, hands each to the kagent Agent over A2A, then (and only then) asks the gate to publish.
 Loop (PDF: fail x3 -> back to the agent): the gate must hold a validated submission before publish; if not, re-prompt
 the same session with the validator's error text, up to MAX_ATTEMPTS."""
-import json, os, time, urllib.request, uuid
+import json, os, signal, threading, time, urllib.request, uuid
 from eda import R, jobof, emit, setf, ACTOR
 import jira
 
@@ -80,11 +80,35 @@ def run(jid):
     emit(jid, "validate", f"failed after {MAX} attempts; last report: " + fb.splitlines()[0][:200], "error")
     status("failed", error=fb[:500], t1=now()); finish(jid, job, "failed", fb.splitlines()[0][:300])
 
+stop = threading.Event()                       # set on SIGTERM: finish the job in hand, take no new ones
+LEASE = lambda jid: f"lease:{jid}"
+LEASE_TTL, RECOVERIES = 60, 2
+
+def heartbeat(jid, done):
+    """While a job runs, keep its lease alive; a missing lease means the worker that took the job is gone."""
+    while not done.wait(LEASE_TTL // 3): R.set(LEASE(jid), "1", ex=LEASE_TTL)
+
+def recover():
+    """Requeue jobs whose worker died mid-run (running or agent-done, no live lease), at most RECOVERIES times, then fail them."""
+    for jid in R.zrevrange("jobs:all", 0, 199):
+        if R.hget(f"job:{jid}", "status") not in ("running", "agent-done") or R.exists(LEASE(jid)): continue
+        n = R.hincrby(f"job:{jid}", "recoveries", 1)
+        if n <= RECOVERIES:
+            setf(jid, status="queued", stage="queued"); R.lpush("jobs", jid)
+            emit(jid, "queued", f"the worker stopped mid-job; requeued (recovery {n}/{RECOVERIES})", "warn")
+        else:
+            setf(jid, status="failed", error=f"the worker stopped mid-job {RECOVERIES} times; retry from the UI"); emit(jid, "agent", "giving up after repeated worker restarts", "error")
+
 def main():
-    print("worker up", flush=True)
-    while True:
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())   # as PID 1 the default would ignore it, and a dying pod kept taking jobs
+    print("worker up", flush=True); last = 0
+    while not stop.is_set():
+        if time.time() - last > 30: recover(); last = time.time()
         item = R.brpop("jobs", timeout=5)
         if not item: continue
-        try: run(item[1])
+        jid = item[1]; R.set(LEASE(jid), "1", ex=LEASE_TTL); done = threading.Event()
+        threading.Thread(target=heartbeat, args=(jid, done), daemon=True).start()
+        try: run(jid)
         except Exception as e:
-            setf(item[1], status="failed", error=str(e)[:500]); emit(item[1], "agent", f"worker error: {str(e)[:300]}", "error"); print("job failed", item[1], e, flush=True)
+            setf(jid, status="failed", error=str(e)[:500]); emit(jid, "agent", f"worker error: {str(e)[:300]}", "error"); print("job failed", jid, e, flush=True)
+        finally: done.set(); R.delete(LEASE(jid))

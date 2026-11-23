@@ -9,6 +9,7 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext: {seccompProfile: {type: RuntimeDefault}}
+      terminationGracePeriodSeconds: 900     # on SIGTERM the worker finishes the job in hand and takes no new ones
       containers:
       - name: worker
         image: localhost:5001/eda-services:dev
