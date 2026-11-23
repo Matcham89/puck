@@ -94,6 +94,7 @@ The agent keeps its own identity (`agent:event-driven-ai`) and is recorded as ac
 - End to end (needs a running cluster; two small LLM jobs, dry runs only): `python3 tests/e2e.py`
 
 ## Troubleshooting
+- `up.sh` fails at the kagent or gateway install with `403 denied` from ghcr.io (the kagent CLI prints only "failed to run helm"): Helm 4 sends stored registry credentials (macOS keychain / gcloud helper) on anonymous pulls, and ghcr rejects stale ones. The install scripts already run Helm with no credential helpers (`deployment/kubernetes/lib.sh`); if you run `helm` yourself against these charts, use the same clean `PATH`, or `docker logout ghcr.io`.
 - Build fails with `unsupported TARGETARCH`: use `docker build` (BuildKit) or `buildx`, not a legacy builder.
 - `up.sh` refuses to start: it checks free disk, VM memory and that both secret files are non-empty.
 - Image pull errors in the cluster: `app/install.sh` pushes to the kind registry at `localhost:5001`; rerun `up.sh` to recreate it.
