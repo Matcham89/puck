@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/Matcham89/puck/compare/v0.3.0...v0.3.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* recover orphaned jobs with an atomic lease claim ([b0da0d8](https://github.com/Matcham89/puck/commit/b0da0d8d9bbd5028c8868643366564591c599c56))
+* worker finishes its job on SIGTERM and recovers orphaned jobs ([ffa6f5e](https://github.com/Matcham89/puck/commit/ffa6f5e4bc0cf0e276a4aab2f91fc573fbbd64d3))
+
 ## [0.3.0](https://github.com/Matcham89/puck/compare/v0.2.0...v0.3.0) (2026-11-23)
 
 
