@@ -5,6 +5,9 @@ on:                        # CI (lint, test) on pull requests, pushes to main an
   push:
     branches: [main]
   pull_request:
+    paths-ignore:          # release PRs (opened by the bot, which GitHub makes wait for manual approval) only touch these two files
+      - CHANGELOG.md
+      - .release-please-manifest.json
   workflow_dispatch:
 
 permissions:
