@@ -89,9 +89,11 @@ def heartbeat(jid, done):
     while not done.wait(LEASE_TTL // 3): R.set(LEASE(jid), "1", ex=LEASE_TTL)
 
 def recover():
-    """Requeue jobs whose worker died mid-run (running or agent-done, no live lease), at most RECOVERIES times, then fail them."""
+    """Requeue jobs whose worker died mid-run (running or agent-done, no live lease), at most RECOVERIES times, then fail them.
+    Claiming the lease with SET NX makes this safe when several workers start at once (a rollout)."""
     for jid in R.zrevrange("jobs:all", 0, 199):
-        if R.hget(f"job:{jid}", "status") not in ("running", "agent-done") or R.exists(LEASE(jid)): continue
+        if R.hget(f"job:{jid}", "status") not in ("running", "agent-done"): continue
+        if not R.set(LEASE(jid), "1", ex=LEASE_TTL, nx=True): continue      # alive, or another worker is already recovering it (atomic claim)
         n = R.hincrby(f"job:{jid}", "recoveries", 1)
         if n <= RECOVERIES:
             setf(jid, status="queued", stage="queued"); R.lpush("jobs", jid)

@@ -12,7 +12,9 @@ class FakeR:
     def hincrby(self, k, f, n): d = self.h.setdefault(k, {}); d[f] = int(d.get(f, 0)) + n; return d[f]
     def zrevrange(self, k, a, b): return list(self.z)
     def exists(self, k): return 1 if k in self.keys else 0
-    def set(self, k, v, ex=None): self.keys[k] = v
+    def set(self, k, v, ex=None, nx=False):
+        if nx and k in self.keys: return None
+        self.keys[k] = v; return True
     def delete(self, k): self.keys.pop(k, None)
     def lpush(self, k, v): self.q.append(v)
     def brpop(self, k, timeout=0): return ("jobs", self.q.pop()) if self.q else None
@@ -34,7 +36,11 @@ check(R.hget("job:agentdone", "status") == "queued" and "agentdone" in R.q, "an 
 check(R.hget("job:alive", "status") == "running" and "alive" not in R.q, "a job with a live lease is left alone")
 check(R.hget("job:fine", "status") == "published" and R.hget("job:queued", "status") == "queued" and "queued" not in R.q, "finished and queued jobs are untouched")
 check(any(l == "warn" and "requeued" in m for _, l, m in EVENTS), "recovery is visible in the job log")
-for _ in range(2): R.hset("job:orphan", "status", "running"); worker.recover()
+# two workers recovering at once (a rollout): the second one still reads the stale "running" status, but the lease claim stops it
+job("racer", "running"); worker.recover(); n1 = R.q.count("racer"); R.hset("job:racer", "status", "running"); worker.recover()
+check(n1 == 1 and R.q.count("racer") == 1 and R.hget("job:racer", "recoveries") == 1, "two workers recovering the same orphan requeue it exactly once")
+R.delete(worker.LEASE("orphan"))
+for _ in range(2): R.hset("job:orphan", "status", "running"); R.delete(worker.LEASE("orphan")); worker.recover()
 check(R.hget("job:orphan", "status") == "failed" and "retry" in R.hget("job:orphan", "error"), f"after {worker.RECOVERIES} recoveries the job fails instead of looping")
 
 # main loop: lease held while a job runs, released after; SIGTERM stops taking jobs
