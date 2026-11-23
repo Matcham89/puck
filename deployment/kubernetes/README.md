@@ -16,7 +16,7 @@ Note: the kagent docs page I checked is the 0.10.x version; this repo pins kagen
 |---|---|
 | `app/` | namespace `eda`: `redis`, `gate`, `intake`, `worker` (and `jira-sim`, a dev-only Jira stand-in), plus the target `catalog.json` |
 | `kagent/agent.yaml` | the agent: `ModelConfig`, `EgressPolicy`, `Agent` in namespace `kagent` |
-| `agent/` (repo root) | the agent's rules, cards and skills. `kagent/agent.sh` packs them into the `agent-knowledge` ConfigMap, and the Agent's prompt includes it (kagent `promptTemplate` data sources). Merging a learning PR changes what new jobs know after the next `agent.sh` (or your GitOps sync); running sessions keep their revision. Native kagent skills are not used yet: per kagent's docs a `git` skill source leaves the agent not Ready, and an OCI skill needs an HTTPS registry the runtime trusts (a local plain-HTTP kind registry does not work) |
+| `agent/` (repo root) | the agent's rules, cards and skills. The gate reads them from the **main branch of the catalog repo marked `"knowledge": true`** on every job (cached per commit) and puts them at the top of the task, so a merged learning PR is live on the very next run with no reload and no redeploy. If that repo is unreachable the job still runs, and a warning is logged on the job. Native kagent skills are not used: kagent pins a skill to an immutable digest and sessions pin their revision, so every merge would need a rebuild and an update, and a `git` source leaves the agent not Ready |
 
 ## Order and criteria
 Each step needs the one before it to be ready.

@@ -1,5 +1,5 @@
 # The agent (Box A). No git credentials, no tokens; egress only to the model gateway (inferred from the ModelConfig) and the gate.
-# Its rules, cards and skills (agent/ in this repo) are included into the system prompt from the agent-knowledge ConfigMap (see agent.sh).
+# Its rules, cards and skills are NOT baked in here: the gate reads agent/ from the catalog's `knowledge: true` repo on every job and puts it at the top of the task.
 apiVersion: api.kagent.dev/v1alpha3
 kind: ModelConfig
 metadata: {name: gateway-sonnet, namespace: kagent}
@@ -45,8 +45,3 @@ spec:
         Keep context small: prefer `tree -L 2`, `rg -n PATTERN path` and `sed -n 'START,ENDp' file` over `cat`/`ls` loops; open a file only to edit
         it or copy a format, and read only the lines you need. Write each new file once, complete, and batch edits in as few commands as possible.
         Never try to push, open PRs or reach any other host. When the gate says ok, stop and reply with one line.
-
-        {{ include "agent-knowledge/knowledge" }}
-      promptTemplate:
-        dataSources:
-          - name: agent-knowledge          # ConfigMap built from agent/ by kagent/agent.sh (AGENTS.md, cards, skills)

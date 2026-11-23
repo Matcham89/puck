@@ -43,6 +43,7 @@ puck = os.environ["PUCK_REPO"]
 if puck.lower() != "none":
     assert ok.match(puck), f"PUCK_REPO must look like OWNER/puck, got {puck!r}"
     cat["puck"] = entry(puck, ["agent/skills/", "agent/cards/"])      # self-learning: skills and cards only
+    cat["puck"]["knowledge"] = True                                     # the gate reads agent/ from this repo's main on every job
 paths = [p.strip() for p in os.environ["ALLOWED_PATHS"].split(",") if p.strip()]
 for repo in os.environ["TARGETS"].split():
     assert ok.match(repo), f"target {repo!r} must look like OWNER/REPO"

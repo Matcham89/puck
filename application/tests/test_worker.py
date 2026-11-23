@@ -23,7 +23,7 @@ class Resp:
     def read(self): return self.b
     def __enter__(self): return self
     def __exit__(self, *a): pass
-worker.urllib.request.urlopen = lambda url, timeout=0: Resp(b"REPO BRIEF (static prefix)")
+worker.urllib.request.urlopen = lambda url, timeout=0: Resp(b"AGENT KNOWLEDGE (shared prefix)" if "/knowledge/" in url else b"REPO BRIEF (static prefix)")
 worker.PUBLISH_KEY = lambda: "k"
 
 def fake_ask(text, context_id=None):
@@ -43,8 +43,8 @@ def check(c, w):
     global ok; print(("PASS " if c else "FAIL ") + w); ok = ok and c
 check(len(prompts) == 2, "two attempts: fail, then pass")
 check(sessions == [None, None], "every attempt is a FRESH session (no context id reused)")
-check(prompts[0].startswith("REPO BRIEF"), "attempt 1 starts with the static brief (cache-friendly prefix)")
-check(prompts[1].startswith("REPO BRIEF") and "learn/sre-7" in prompts[1], "attempt 2 starts with the same brief and names the branch")
+check(prompts[0].startswith("AGENT KNOWLEDGE") and prompts[0].index("REPO BRIEF") > 0, "attempt 1 starts with the knowledge, then the static brief (cache-friendly prefix)")
+check(prompts[1].startswith("AGENT KNOWLEDGE") and "REPO BRIEF" in prompts[1] and "learn/sre-7" in prompts[1], "attempt 2 starts with the same knowledge and brief and names the branch")
 check("SC2164" in prompts[1] and "authoritative" in prompts[1], "attempt 2 carries the exact failure and the 'checks win' rule")
 check("/restore/abc123abc123" in prompts[1] and ".eda/submit.sh" in prompts[1], "attempt 2 tells the fresh sandbox how to restore its work and resubmit")
 check(all(f in prompts[1] for f in ("Objective:", "Artifact:", "Evidence", "Status:", "Blockers:", "Next Action:")), "retry is a structured handoff with all six fields")

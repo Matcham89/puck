@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """event-driven-ai services in one file: intake (service catalog + queue), gate (validator + publisher), worker (see worker.py)."""
-import lint, base64, hashlib, io, json, os, re, shutil, subprocess, sys, tarfile, tempfile, time, urllib.request, uuid
+import lint, base64, glob, hashlib, io, json, os, re, shutil, subprocess, sys, tarfile, tempfile, time, urllib.request, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import redis
 
@@ -207,6 +207,31 @@ def brief(job):
             if os.path.isfile(f): out.append(f"## {name}\n" + clip(open(f, errors="replace").read(), cap))
         return "\n\n".join(out)
 
+KNOWLEDGE_CAP, FILE_CAP = 60000, 8000
+
+def knowledge():
+    """The agent's rules, cards and skills (agent/AGENTS.md, agent/cards/*.md, agent/skills/*/SKILL.md) from the repo the catalog marks
+    `knowledge: true`, read from its base branch on EVERY job, so a merged skill is live on the next run. A cheap ls-remote finds the
+    current commit and the text is cached per commit. Returns "" when no repo is marked."""
+    c = next((v for v in CATALOG.values() if v.get("knowledge")), None)
+    if not c: return ""
+    src = {"repo": c["repo"], "base_branch": c["base_branch"]}
+    sha = sh(["git", "ls-remote", remote(src), f"refs/heads/{c['base_branch']}"]).stdout.split()[0]
+    cache = f"{DATA}/knowledge/{sha}.txt"
+    if os.path.exists(cache): return open(cache).read()
+    with tempfile.TemporaryDirectory() as t:
+        r = f"{t}/r"; fresh_clone(src, r)
+        part = lambda path: clip(open(path, errors="replace").read(), FILE_CAP)
+        out = [f"AGENT KNOWLEDGE from {c['repo']}@{sha[:7]}: your rules, cards and skills, already loaded. Follow the card or skill that matches the task."]
+        if os.path.isfile(f"{r}/agent/AGENTS.md"): out.append(part(f"{r}/agent/AGENTS.md"))
+        for kind, pattern in (("Card", "agent/cards/*.md"), ("Skill", "agent/skills/*/SKILL.md")):
+            for f in sorted(glob.glob(f"{r}/{pattern}")):
+                name = os.path.basename(f)[:-3] if kind == "Card" else os.path.basename(os.path.dirname(f))
+                out.append(f"## {kind}: {name}\n" + part(f))
+        text = clip("\n\n".join(out), KNOWLEDGE_CAP)
+    os.makedirs(os.path.dirname(cache), exist_ok=True); open(cache, "w").write(text)
+    return text
+
 def submit(job, data):
     """Overlay the uploaded tree on a fresh clone of base, run the deterministic lint. Returns (ok, message)."""
     w = f"{DATA}/work/{job['id']}"; shutil.rmtree(w, ignore_errors=True); os.makedirs(w)
@@ -261,8 +286,11 @@ def publish(job):
 
 class Gate(BaseHTTPRequestHandler):
     def do_GET(self):
-        m = re.fullmatch(r"/(snapshot|restore|last|brief)/([a-f0-9]{12})", self.path); job = m and jobof(m.group(2))
+        m = re.fullmatch(r"/(snapshot|restore|last|brief|knowledge)/([a-f0-9]{12})", self.path); job = m and jobof(m.group(2))
         if not job: return reply(self, 404, {"error": "unknown job"})
+        if m.group(1) == "knowledge":
+            try: return reply(self, 200, None, raw=scrub(knowledge()).encode(), ctype="text/plain")
+            except Exception as e: return reply(self, 500, {"error": scrub(e)})
         if m.group(1) == "brief":
             try: return reply(self, 200, None, raw=scrub(brief(job)).encode(), ctype="text/plain")
             except Exception as e: return reply(self, 500, {"error": scrub(e)})

@@ -12,7 +12,8 @@
       "yaml",
       "shell"
     ],
-    "autofix": []
+    "autofix": [],
+    "knowledge": true
   },
   "my-service": {
     "repo": "OWNER/REPO",
