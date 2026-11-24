@@ -49,7 +49,17 @@ Pull requests never push. The push job needs `lint` and `test` to pass first. Fo
 ## B. Run it locally
 
 ### Prerequisites
-[OrbStack](https://orbstack.dev) (or Docker Desktop/Colima) with at least ~5.5 GB memory and 15 GB free disk, plus `kubectl`, `helm`, `go`, `gh` and `git`. Apple Silicon or x86 both work (the image is built per architecture).
+Install these first; `up.sh` checks for them and names anything missing before it changes anything.
+
+| Need | Notes |
+|---|---|
+| A container runtime | [OrbStack](https://orbstack.dev), Docker Desktop, Colima or Docker Engine, with **at least ~5.5 GB memory** and **15 GB free disk** |
+| `kind`, `kubectl`, `helm` | Helm 4 is fine |
+| `git`, `curl`, `python3` | `python3` is used by `setup.sh` |
+| A GitHub token | fine-grained, **contents** and **pull requests** write, limited to the repos you list in the catalog |
+| An Anthropic API key | held by the in-cluster gateway, never by the agent |
+
+**Platforms:** developed and tested on macOS (Apple Silicon). The installer picks the kagent CLI for your OS and CPU (macOS or Linux, arm64 or amd64) and checks its checksum, but we have not run it on Linux or Intel; if you do, please report what you hit. You do not need `go` or the `gh` CLI.
 
 ### 1. Secrets and config (one command)
 `sh setup.sh` creates every file below plus the catalog; `sh setup.sh --check` shows what is missing. The tables explain each file.

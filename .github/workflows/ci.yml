@@ -26,6 +26,8 @@ jobs:
         run: shellcheck -S warning setup.sh deployment/kubernetes/*.sh deployment/kubernetes/*/*.sh application/tests/run.sh application/*.sh
       - name: Python compiles
         run: python3 -m compileall -q application tests
+      - name: Platform helpers
+        run: sh application/tests/test_platform.sh
       - name: JSON
         run: jq empty deployment/kubernetes/app/catalog.example.json release-please-config.json .release-please-manifest.json
       - name: YAML

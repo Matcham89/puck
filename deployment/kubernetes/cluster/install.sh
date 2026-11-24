@@ -1,8 +1,11 @@
 #!/bin/sh
 # Usage: deployment/kubernetes/cluster/install.sh   Preflight + pinned tooling + the kind cluster with Agent Substrate. Idempotent.
-# Needs: docker, go, git, gh (one-time kagent CLI download). Run from anywhere; it works from the repo root.
+# Needs: docker, kind, kubectl, helm, git, curl (all checked below). Run from anywhere; it works from the repo root.
 set -eu
 cd "$(dirname "$0")/../../.."; ROOT=$PWD; V=$ROOT/vendor
+# shellcheck source=../lib.sh
+. "$ROOT/deployment/kubernetes/lib.sh"
+need docker kind kubectl helm git curl
 SUBSTRATE_TAG=v1.0.0; KAGENT_TAG=v1.0.1
 
 # Preflight: the failures that bit us were a full Docker disk, too little memory, and missing secrets.
@@ -16,9 +19,11 @@ free_kb=$(docker run --rm alpine df -Pk / | awk 'NR==2{print $4}'); mem=$(docker
 mkdir -p "$V/bin"
 [ -d "$V/substrate" ] || git clone -q --depth 1 --branch "$SUBSTRATE_TAG" https://github.com/agent-substrate/substrate "$V/substrate"
 if [ ! -x "$V/bin/kagent" ]; then
-  gh release download "$KAGENT_TAG" --repo kagent-dev/kagent -p kagent-darwin-arm64 -p kagent-darwin-arm64.sha256 -D "$V/bin" --clobber
-  [ "$(cut -d' ' -f1 "$V/bin/kagent-darwin-arm64.sha256")" = "$(shasum -a 256 "$V/bin/kagent-darwin-arm64" | cut -d' ' -f1)" ] || { echo "kagent CLI checksum mismatch" >&2; exit 1; }
-  mv "$V/bin/kagent-darwin-arm64" "$V/bin/kagent"; chmod +x "$V/bin/kagent"
+  asset=$(kagent_asset "$(uname -s)" "$(uname -m)")                     # the CLI for THIS platform; plain curl, no GitHub login needed
+  base=https://github.com/kagent-dev/kagent/releases/download/$KAGENT_TAG
+  curl -fsSL -o "$V/bin/$asset" "$base/$asset" && curl -fsSL -o "$V/bin/$asset.sha256" "$base/$asset.sha256" || { echo "could not download $asset ($base)" >&2; exit 1; }
+  [ "$(cut -d' ' -f1 "$V/bin/$asset.sha256")" = "$(sha256_of "$V/bin/$asset")" ] || { rm -f "$V/bin/$asset"; echo "kagent CLI checksum mismatch" >&2; exit 1; }
+  mv "$V/bin/$asset" "$V/bin/kagent"; chmod +x "$V/bin/kagent"; rm -f "$V/bin/$asset.sha256"
 fi
 
 # Cluster (skip if it exists). No CPU reservation: with one 4-CPU node it only starves the pods.
