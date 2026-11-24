@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/Matcham89/puck/compare/v0.3.1...v0.4.0) (2026-11-24)
+
+
+### Features
+
+* the agent reads its rules, cards and skills from main on every job ([bdda588](https://github.com/Matcham89/puck/commit/bdda588ad7d8cd5ec51e9610e94ab182ab76a68d))
+
+
+### Bug Fixes
+
+* portable kagent CLI download, tool preflight, honest prerequisites ([37b75b3](https://github.com/Matcham89/puck/commit/37b75b39cb6563fbd90c6d499fb72d5f77e23ee0))
+
 ## [0.3.1](https://github.com/Matcham89/puck/compare/v0.3.0...v0.3.1) (2026-11-23)
 
 
