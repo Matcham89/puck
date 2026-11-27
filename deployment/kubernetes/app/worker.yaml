@@ -22,13 +22,18 @@ spec:
         - {name: A2A_URL, value: "http://kagent-controller.kagent.svc:8083/agents/kagent/sre-agent"}
         - {name: REVIEW_A2A_URL, value: "http://kagent-controller.kagent.svc:8083/agents/kagent/reviewer-agent"}   # the independent reviewer; remove to skip review
         - {name: JIRA_BASE_URL, value: "http://jira-sim:8080"}   # real Jira: https://<site>.atlassian.net, plus a jira-api secret with the Authorization header
+        - {name: LINEAR_LABEL, value: "agent"}          # Linear polling runs only when the linear-api secret exists; see docs/getting-started.md
+        - {name: LINEAR_REVIEW_STATE, value: "In Review"}
+        - {name: LINEAR_POLL, value: "60"}
         securityContext: {runAsNonRoot: true, runAsUser: 10001, readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
         resources: {requests: {cpu: 20m, memory: 64Mi}, limits: {memory: 512Mi}}
         volumeMounts:
         - {name: tmp, mountPath: /tmp}
         - {name: catalog, mountPath: /etc/eda, readOnly: true}
         - {name: publish-key, mountPath: /run/secrets/publish, readOnly: true}
+        - {name: linear-api, mountPath: /run/secrets/linear, readOnly: true}
       volumes:
       - {name: tmp, emptyDir: {sizeLimit: 512Mi}}
       - {name: catalog, configMap: {name: eda-catalog}}
       - {name: publish-key, secret: {secretName: publish-key}}
+      - {name: linear-api, secret: {secretName: linear-api, optional: true}}   # optional: the pod starts without it and Linear stays off
