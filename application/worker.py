@@ -3,7 +3,7 @@ Loop (PDF: fail x3 -> back to the agent): the gate must hold a validated submiss
 the same session with the validator's error text, up to MAX_ATTEMPTS."""
 import hashlib, json, os, signal, threading, time, urllib.error, urllib.request, uuid
 from eda import R, jobof, emit, setf, ACTOR, CATALOG, canonical_job, enqueue
-import jira
+import jira, linear
 
 A2A = os.environ.get("A2A_URL", "http://kagent-controller.kagent.svc:8083/agents/event-driven-ai/sre-agent")
 REVIEW = os.environ.get("REVIEW_A2A_URL")      # the independent reviewer agent; unset = no review (unit tests, or a cluster without it)
@@ -87,6 +87,7 @@ def finish(jid, job, state, detail=""):
         try: learn(jid, job)
         except Exception as e: emit(jid, "done", f"could not queue the lesson: {str(e)[:150]}", "warn")
     res = jira.notify(job, state, detail)
+    if res == "skipped": res = linear.notify(job, state, detail)
     if res != "skipped": emit(jid, "done", f"Jira {job.get('source', {}).get('key', '')}: {res}", "info" if res == "commented" else "warn")
 
 def attempts(jid, job, fb=None, fix=False):
@@ -254,7 +255,7 @@ def recover():
 
 def main():
     signal.signal(signal.SIGTERM, lambda *_: stop.set())   # as PID 1 the default would ignore it, and a dying pod kept taking jobs
-    print("worker up", flush=True); last = 0
+    print("worker up", flush=True); last = 0; linear.start()
     while not stop.is_set():
         if time.time() - last > 30: recover(); last = time.time()
         item = R.brpop("jobs", timeout=5)

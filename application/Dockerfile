@@ -24,7 +24,7 @@ RUN git init -q /tmp/o && git -C /tmp/o fetch -q --depth 1 https://github.com/an
  && git -C /tmp/o checkout -q FETCH_HEAD && cp /tmp/o/plugins/skill-creator/skills/skill-creator/scripts/quick_validate.py /opt/quick_validate.py && rm -rf /tmp/o
 RUN pip install --no-cache-dir pyyaml
 COPY application/playbook-check.sh /usr/local/bin/playbook-check.sh
-COPY application/eda.py application/worker.py application/lint.py application/ui.py application/jira.py /app/
+COPY application/eda.py application/worker.py application/lint.py application/ui.py application/jira.py application/linear.py /app/
 COPY application/templates /app/templates
 RUN chmod +x /usr/local/bin/playbook-check.sh && adduser -D -u 10001 app && mkdir -p /data && chown app /data
 USER app

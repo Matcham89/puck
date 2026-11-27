@@ -34,7 +34,7 @@ Linear issue -> intake adapter -> queue -> router -> specialist agent -> gate ->
 | Phase | What | Done when |
 |---|---|---|
 | 0 | Backport the hardening work to puck (this PR) | merged, tests green, `docs/hardening-changes.md` is the record |
-| 1 | Linear adapter: poll, allowlist, write-back | a ticket I create in Linear ends as a draft PR and a comment, with no manual submit |
+| 1 | Linear adapter: poll, allowlist, write-back (**status: written and unit-tested against a stub; the live Linear API is unverified**: the `commentCreate` and `issueUpdate` mutations and the un-prefixed `Authorization` header for personal keys have never run against Linear) | a ticket I create in Linear ends as a draft PR and a comment, with no manual submit |
 | 2 | Router and the first extra domain (Flux) | the same eval suite passes per domain and a Flux ticket never loads the Terraform pack |
 | 3 | Burn-in on real tickets in my own projects | ~20 tickets reviewed; each repeated mistake turned into a gate or eval case; weekly sample of outputs |
 | 4 | Merge eligibility for the narrow classes | a month of sampled merges with no revert |
