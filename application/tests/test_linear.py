@@ -45,7 +45,7 @@ calls = []; todo = [issue()]
 def gql(q, v=None):
     calls.append((q.split("{")[0].split("(")[0].strip(), v))
     if q is linear.ISSUES: return {"viewer": {"id": ME}, "issues": {"nodes": list(todo)}}
-    if q is linear.STATES: return {"issue": {"team": {"states": {"nodes": [{"id": "s-todo", "name": "Todo", "type": "unstarted"}, {"id": "s-prog", "name": "In Progress", "type": "started"}, {"id": "s-rev", "name": "In Review", "type": "started"}]}}}}
+    if q is linear.STATES: return {"issue": {"team": {"states": {"nodes": [{"id": "s-todo", "name": "Todo", "type": "unstarted"}, {"id": "s-rev", "name": "In Review", "type": "started"}, {"id": "s-prog", "name": "In Progress", "type": "started"}]}}}}
     return {}
 linear.gql = gql
 def muts(): return [(n, v) for n, v in calls if n.startswith("mutation")]
@@ -53,7 +53,7 @@ linear.poll_once(); m = muts()
 job = json.loads(eda.R.h[f"job:{eda.R.q[0]}"]["job"]) if eda.R.q else {}
 ok2 = all([
     expect(len(eda.R.q) == 1 and job.get("service") == "svc" and job["source"]["key"] == "uuid-1", "poll: one job for the eligible issue"),
-    expect(("mutation", {"id": "uuid-1", "state": "s-prog"}) in m, "poll: issue moved to the started state"),
+    expect(("mutation", {"id": "uuid-1", "state": "s-prog"}) in m, "poll: issue moved to In Progress, not In Review (which is listed first and is also type started)"),
     expect(any(v and "Picked up" in v.get("body", "") for _, v in m), "poll: a Picked up comment"),
 ])
 n = len(m); linear.poll_once()
