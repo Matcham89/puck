@@ -1,5 +1,7 @@
 {% extends "base.html" %}{% block body %}
-<div hx-get="/ui/queue" hx-trigger="every 3s" hx-swap="innerHTML">{% include "_queue.html" %}</div>
+<form method="get" action="/"><label>Repo <select name="service">
+<option value="">All</option>{% for s in services %}<option value="{{ s.name }}"{% if s.name == service %} selected{% endif %}>{{ s.name }} ({{ s.repo }})</option>{% endfor %}
+</select></label> <button>Show</button></form>
 <h2>Jobs</h2>
-<div hx-get="/ui/jobs" hx-trigger="every 3s" hx-swap="innerHTML">{% include "_jobs.html" %}</div>
+<div hx-get="/ui/jobs{% if service %}?service={{ service|urlencode }}{% endif %}" hx-trigger="every 3s" hx-swap="innerHTML">{% include "_jobs.html" %}</div>
 {% endblock %}

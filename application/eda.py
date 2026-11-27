@@ -66,11 +66,6 @@ def job_events(jid):
 def job_subs(jid):
     return [json.loads(x) for x in R.lrange(f"subs:{jid}", 0, -1)]
 
-def queue_status():
-    jobs = list_jobs(200)
-    count = lambda *st: sum(1 for j in jobs if j.get("status") in st)
-    return {"depth": R.llen("jobs"), "running": count("running", "agent-done"), "failed": [j for j in jobs if j.get("status") == "failed"][:10]}
-
 # ---------- intake: validate the event against the service catalog, make canonical JSON, enqueue ----------
 def source_of(ev):
     src = ev.get("source") if isinstance(ev.get("source"), dict) else {"type": "api"}
