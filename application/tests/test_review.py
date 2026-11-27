@@ -1,6 +1,6 @@
 """Run in the gate image:  docker run --rm -v $PWD/application/tests:/t --entrypoint python3 -e PYTHONPATH=/app <image> /t/test_review.py
-The independent review step: approve and concerns publish with the verdict in the PR body, block goes back to the author once, a second block fails the job,
-a broken reviewer never blocks but says so."""
+The independent review step: approve publishes with the verdict in the PR body; block or concerns goes back to the author ONCE with the findings and the
+revised change is reviewed again; a second block fails the job, a second concerns publishes with both rounds in the PR body; a broken reviewer never blocks but says so."""
 import json, os, sys, tempfile, types
 sys.modules["redis"] = types.SimpleNamespace(Redis=types.SimpleNamespace(from_url=lambda *a, **k: None))
 cat = tempfile.mkdtemp() + "/c.json"; open(cat, "w").write("{}"); os.environ["CATALOG"] = cat
@@ -39,8 +39,19 @@ pr = lambda: eda.R.hget("job:abc123abc123", "pr")
 setup([{"verdict": "approve", "findings": []}])
 check(worker.reviewed("abc123abc123", JOB) == (True, "") and "approved" in pr() and calls[0][0] == "http://reviewer", "approve: goes on, PR body says approved, the REVIEWER agent was called")
 check("DIFF TEXT" in calls[0][1] and "bump x" in calls[0][1] and "Title" in calls[0][1], "the reviewer gets the ticket, PR.md and the diff")
-setup([{"verdict": "concerns", "findings": ["touches the shared library chart"]}])
-check(worker.reviewed("abc123abc123", JOB)[0] and "with concerns" in pr() and "shared library chart" in pr(), "concerns: publishable, findings are in the PR body for the human")
+setup([{"verdict": "concerns", "findings": ["touches the shared library chart"]}, {"verdict": "approve", "findings": []}])
+r = worker.reviewed("abc123abc123", JOB); author = [c for c in calls if c[0] != worker.REVIEW]
+check(r[0] and len(author) == 1 and "touches the shared library chart" in author[0][1], "concerns: the author is sent back ONCE with the findings (a fresh session, not a rubber stamp)")
+check("do not invent one" in author[0][1] and "RAISED FINDINGS" in author[0][1], "the handoff says to fix what the repo allows and to say so, not guess, when a finding needs a value or a decision")
+check(len([c for c in calls if c[0] == worker.REVIEW]) == 2 and "approved after one revision round" in pr() and "Round 1 findings" in pr() and "touches the shared library chart" in pr(), "the revised change is reviewed again; the PR records the round-1 findings for the human")
+setup([{"verdict": "concerns", "findings": ["placeholder id"]}, {"verdict": "concerns", "findings": ["placeholder id still needs a real value"]}])
+r = worker.reviewed("abc123abc123", JOB); author = [c for c in calls if c[0] != worker.REVIEW]
+check(r[0] and len(author) == 1 and "with concerns after one revision round" in pr() and "placeholder id still needs a real value" in pr() and "Round 1 findings" in pr(), "concerns twice: ONE loop only, then publish with both rounds' findings in the PR body")
+setup([{"verdict": "concerns", "findings": ["a"]}, {"verdict": "block", "findings": ["the revision broke it"]}])
+r = worker.reviewed("abc123abc123", JOB)
+check(not r[0] and "twice" in r[1] and "the revision broke it" in r[1], "concerns, then block: the job fails, nothing is published")
+setup([{"verdict": "concerns", "findings": ["a"]}, "not json"])
+check(worker.reviewed("abc123abc123", JOB)[0] and "NOT run" in pr() and "Round 1 findings" in pr(), "reviewer unusable on the second look: never blocks, PR says so and keeps round 1")
 setup([{"verdict": "block", "findings": ["invented module foo/bar"]}, {"verdict": "approve", "findings": []}])
 r = worker.reviewed("abc123abc123", JOB)
 author = [c for c in calls if c[0] != worker.REVIEW]
