@@ -45,7 +45,7 @@ calls = []; todo = [issue()]
 def gql(q, v=None):
     calls.append((q.split("{")[0].split("(")[0].strip(), v))
     if q is linear.ISSUES: return {"viewer": {"id": ME}, "issues": {"nodes": list(todo)}}
-    if q is linear.STATES: return {"issue": {"team": {"states": {"nodes": [{"id": "s-todo", "name": "Todo", "type": "unstarted"}, {"id": "s-rev", "name": "In Review", "type": "started"}, {"id": "s-prog", "name": "In Progress", "type": "started"}]}}}}
+    if q is linear.STATES: return {"issue": {"team": {"states": {"nodes": [{"id": "s-todo", "name": "Todo", "type": "unstarted"}, {"id": "s-rev", "name": "In Review", "type": "started"}, {"id": "s-prog", "name": "In Progress", "type": "started"}, {"id": "s-park", "name": "Backlog", "type": "backlog"}]}}}}
     return {}
 linear.gql = gql
 def muts(): return [(n, v) for n, v in calls if n.startswith("mutation")]
@@ -72,8 +72,10 @@ ok5 = all([
     expect("linear:seen:uuid-1" not in eda.R.keys, "notify: seen claim released so a re-Todo'd issue runs again"),
 ])
 calls.clear(); eda.R.keys["linear:seen:uuid-1"] = "1"
-linear.notify(job, "failed", "boom")
-ok6 = expect(not any(v.get("state") for _, v in muts() if "state" in v), "notify: a failed job is commented but not moved to In Review")
+linear.notify(job, "failed", "boom"); m = muts()
+ok6 = expect(("mutation", {"id": "uuid-1", "state": "s-park"}) in m and not any(v.get("state") == "s-rev" for _, v in m if "state" in v), "notify: a failed job is commented and parked in Backlog, not In Review or left In Progress")
+calls.clear(); linear.notify(job, "no-change", "x"); linear.notify(job, "validated-dry-run", "")
+ok6 = expect(len([1 for _, v in muts() if v.get("state") == "s-park"]) == 2, "notify: no-change and a dry run are parked too") and ok6
 ok7 = expect(linear.notify({"source": {"type": "jira", "key": "X-1"}, "ticket_key": "X-1"}, "published", "") == "skipped", "notify: skipped for non-linear jobs")
 linear.KEY_FILE = key + ".missing"
 ok8 = expect(linear.notify(job, "published", "") == "skipped", "notify: skipped without a key file")

@@ -17,6 +17,7 @@ KEY_FILE = os.environ.get("LINEAR_KEY_FILE", "/run/secrets/linear/key")
 API = os.environ.get("LINEAR_API_URL", "https://api.linear.app/graphql")
 TRIGGER = os.environ.get("LINEAR_LABEL", "agent")
 REVIEW_STATE = os.environ.get("LINEAR_REVIEW_STATE", "In Review")
+PARKED_STATE = os.environ.get("LINEAR_PARKED_STATE", "Backlog")   # failed, no-change and dry-run tickets wait here for a human; Backlog is not "unstarted", so the poller never re-takes them
 START_STATE = os.environ.get("LINEAR_START_STATE", "In Progress")   # by name: a team can have several "started" states (In Review is one)
 POLL = int(os.environ.get("LINEAR_POLL", "60"))
 
@@ -98,6 +99,7 @@ def notify(job, status, detail=""):
     try:
         comment(src["key"], jira.outcome_text(job, status, detail))
         if status in ("published", "ci-failed", "ci-timeout"): move(src["key"], lambda s: s["name"] == REVIEW_STATE)
+        elif status in ("failed", "no-change", "validated-dry-run"): move(src["key"], lambda s: s["name"] == PARKED_STATE)
         eda.R.delete(f"linear:seen:{src['key']}")
         return "commented"
     except Exception as e:
