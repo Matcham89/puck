@@ -1,3 +1,5 @@
-# kagent chart overrides for the 4-CPU kind node: the UI is not needed for the headless flow.
+# kagent chart overrides for the kind node.
 ui:
-  replicas: 0
+  replicas: 1             # the UI shows the agents and the substrate actors; it is small
+substrateWorkerPool:
+  replicas: 4             # one worker runs one actor at a time: with 1, only one ticket's agent runs while the rest wait

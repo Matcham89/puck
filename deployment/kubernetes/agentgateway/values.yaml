@@ -10,9 +10,17 @@ podSecurityContext: {seccompProfile: {type: RuntimeDefault}}
 resources: {requests: {cpu: 50m, memory: 96Mi}, limits: {memory: 256Mi}}
 extraVolumes:
 - {name: anthropic-key, secret: {secretName: anthropic-api-key, defaultMode: 0444}}
+- {name: logs, emptyDir: {sizeLimit: 1Gi}}
 extraVolumeMounts:
 - {name: anthropic-key, mountPath: /var/run/secrets/anthropic, readOnly: true}
+- {name: logs, mountPath: /data}
 config:
+  config:
+    logging:
+      database: {url: "sqlite:///data/logs.db"}   # request log for the UI Logs page and `agctl standalone analytics`; emptyDir: gone when the pod restarts
+  frontendPolicies:
+    accessLog:
+      database: {llm: full}                        # also store prompt and completion text, not only metadata
   gateways:
     default: {port: 4000}
   llm:
