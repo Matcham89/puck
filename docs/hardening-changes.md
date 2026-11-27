@@ -27,7 +27,7 @@ A record of what changed between this repo's earlier state and the Tempo fork (`
 | Change | Why |
 |---|---|
 | CI watch and fix loop (`ci_loop`, `CI_ROUNDS=2`) | After the draft PR, wait for CI; on red a fresh session fixes the same branch with the failing logs; `CI-UNRELATED` exit; `blind` state when only hidden checks are red. |
-| Independent reviewer (`review`, `reviewed`) | A second agent in a fresh context reads ticket, PR.md and diff. `block` or `concerns` sends the author back once with the findings (fresh session); the revised change is reviewed again, and a second block fails the job; the verdict and round-1 findings go in the PR body; a broken reviewer never blocks but the PR says it was not run. |
+| Independent reviewer (`review`, `reviewed`) | A second agent in a fresh context reads ticket, PR.md and diff. `block` or `concerns` sends the author back with the findings (fresh session) and the revised change is reviewed again, up to three reviews; a block on the third fails the job; the verdict and round-1 findings go in the PR body; a broken reviewer never blocks but the PR says it was not run. |
 | `post()` and `fetch()` keep the gate's error body | "HTTP Error 500" hid the real reason (rejected push, failed clone). |
 | `LESSONS_PER_DAY` (5); lesson job wording | Bounded learning; "only if it helps on a different repo". |
 | Stage is `publish` while publishing | A publish failure showed as failing at validate. |

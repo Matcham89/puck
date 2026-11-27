@@ -15,7 +15,7 @@ One fine-grained PAT (`secrets/git_token`) covers puck plus the targets, **conte
 
 ```
 agent/        the bot's own knowledge: AGENTS.md, skills/, cards/   (read-only to the agent; it learns only via reviewed draft PRs)
-application/  services image: intake, worker, gate, jobs/logs UI, lint, Jira client + simulator, unit tests
+application/  services image: intake, worker, gate, jobs/logs UI, lint, Jira and Linear adapters + simulator, unit tests
 deployment/
   kubernetes/ one dir per component, each with an install.sh: cluster/ (kind + Substrate), kagent/, agentgateway/, app/ (services + catalog); up.sh runs them all
 tests/        end-to-end tests against a running cluster

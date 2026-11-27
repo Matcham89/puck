@@ -67,7 +67,7 @@
         <li>A <b>Jira webhook</b> (<code>/webhooks/jira</code>, HMAC-verified) or <code>POST /events</code></li>
         <li><b>Intake</b> parses the ticket (rich text to plain text), needs the trigger label, drops duplicates, and maps project + component to a <b>service catalog</b> entry</li>
         <li>Bad input gets a 400; good input becomes <b>canonical JSON</b></li>
-        <li>Job goes on a <b>Redis</b> queue; a small <b>web UI</b> (same pod) shows queue, stages, validator results and a live log</li>
+        <li>Job goes on a <b>Redis</b> queue; a small <b>web UI</b> (same pod) lists jobs (filter by repo) and shows stages, validator results, review rounds and a live log</li>
         <li><b>Worker</b> pops it, fetches the repo brief, asks kagent</li>
       </ul>
     </div>
