@@ -1,13 +1,5 @@
 {% extends "base.html" %}{% block body %}
-{% if error %}<div class="box" style="border-color:#e6a5a1;background:#fdecea"><b>Not accepted:</b> {{ error }}</div>{% endif %}
-<form method="post" action="/ui/jobs">
-<textarea name="text" rows="4" placeholder="e.g. Add a skill about undoing a bad Kubernetes rollout to the playbook" required>{{ form.text if form else '' }}</textarea>
-<p><select name="service" required style="padding:.3rem">{% for s in services %}<option value="{{ s.name }}">{{ s.name }} ({{ s.repo }})</option>{% endfor %}</select></p>
-<p><input type="text" name="ticket" placeholder="Ticket (e.g. SRE-123): used for the branch name and the PR title" value="{{ form.ticket if form else '' }}"></p>
-<p><label><input type="checkbox" name="dry_run" {% if form and form.dry_run %}checked{% endif %}> Dry run: validate only, push nothing, open no PR</label></p>
-<p class="muted">Model: <code>{{ model }}</code> via the in-cluster gateway <small>(one Anthropic route; each retry starts a fresh session)</small></p>
-<button>Submit</button></form>
 <div hx-get="/ui/queue" hx-trigger="every 3s" hx-swap="innerHTML">{% include "_queue.html" %}</div>
-<h2>Tasks</h2>
+<h2>Jobs</h2>
 <div hx-get="/ui/jobs" hx-trigger="every 3s" hx-swap="innerHTML">{% include "_jobs.html" %}</div>
 {% endblock %}

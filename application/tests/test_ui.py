@@ -1,5 +1,5 @@
 """Run in the gate image:  docker run --rm -v $PWD/application/tests:/t --entrypoint python3 -e PYTHONPATH=/app <image> /t/test_ui.py
-Renders every UI page against an in-memory Redis: content, escaping, form validation, retry rules, htmx refresh."""
+Renders every UI page against an in-memory Redis: content, escaping, retry rules, htmx refresh. The UI only tracks jobs and their logs; it has no submit form."""
 import io, json, os, sys, tempfile, time, types
 sys.modules["redis"] = types.SimpleNamespace(Redis=types.SimpleNamespace(from_url=lambda *a, **k: None))
 cat = tempfile.mkdtemp() + "/c.json"
@@ -43,13 +43,11 @@ ok = True
 def check(c, w):
     global ok; print(("PASS " if c else "FAIL ") + w); ok = ok and c
 
-h = get("/"); check(h.code == 200 and "No tasks yet." in h.body and "my-service (OWNER/REPO)" in h.body, "index renders with the catalog's services and an empty list")
-h = post("/ui/jobs", {"text": "Add a skill about <script>alert(1)</script> rollouts", "service": "my-service", "ticket": "sre-5", "dry_run": "on"})
-check(h.code == 303 and h.out_headers["Location"].startswith("/ui/jobs/"), "valid form is accepted and redirects to the job page")
-jid = h.out_headers["Location"].rsplit("/", 1)[1]
-check(eda.R.llen("jobs") == 1 and eda.job_view(jid)["ticket_key"] == "SRE-5" and eda.job_view(jid)["dry_run"] is True, "job is queued, ticket upper-cased, dry run kept")
-h = post("/ui/jobs", {"text": "short", "service": "my-service"})
-check(h.code == 400 and "Not accepted" in h.body and "short" in h.body, "an invalid form is rejected with the reason and keeps what was typed")
+h = get("/"); check(h.code == 200 and "No jobs yet." in h.body and 'action="/ui/jobs"' not in h.body and "<textarea" not in h.body, "index renders an empty job list and has no submit form")
+job = eda.canonical_job({"service": "my-service", "instruction": "Add a skill about <script>alert(1)</script> rollouts", "ticket_key": "SRE-5", "dry_run": True})
+eda.enqueue(job); jid = job["id"]
+check(eda.R.llen("jobs") == 1 and eda.job_view(jid)["dry_run"] is True, "a job created through intake is queued")
+h = get("/"); check(h.code == 200 and f"/ui/jobs/{jid}" in h.body and "SRE-5" in h.body, "index lists the job with its link and ticket key")
 h = get(f"/ui/jobs/{jid}")
 check(h.code == 200 and "<script>alert(1)</script>" not in h.body and "&lt;script&gt;" in h.body, "instruction text is HTML-escaped (no script injection)")
 check('hx-get="/ui/jobs/%s/events?live=1"' % jid in h.body and eda.job_view(jid)["branch"].startswith("SRE-5/") and eda.job_view(jid)["branch"] in h.body, "a queued job polls its events and shows the runtime-owned branch")
@@ -61,7 +59,9 @@ check('class="stage cur">agent' in h.body and "FAIL" in h.body and "PASS" in h.b
 h = get(f"/ui/jobs/{jid}/events?live=1"); check("HX-Refresh" not in h.out_headers and "attempt 1/3" in h.body, "events fragment while running: content, no refresh")
 eda.setf(jid, status="validated-dry-run", stage="done")
 h = get(f"/ui/jobs/{jid}/events?live=1"); check(h.out_headers.get("HX-Refresh") == "true", "when the job finishes the live fragment asks htmx to reload the page")
-h = get("/ui/jobs"); check("validated (dry run)" in h.body and "SRE-5" in h.body, "task list shows the friendly status and ticket")
+eda.setf(jid, pr_url="https://github.com/OWNER/REPO/pull/7")
+h = get("/ui/jobs"); check("validated (dry run)" in h.body and "SRE-5" in h.body and "pull/7" in h.body, "job list shows the friendly status, ticket and PR link")
+h = get(f"/ui/jobs/{jid}"); check("Draft PR" in h.body and "pull/7" in h.body, "job page links the draft PR")
 # retry rules
 h = post(f"/ui/jobs/{jid}/retry", {}); check(eda.job_view(jid)["status"] == "validated-dry-run" and eda.R.llen("jobs") == 1, "retry on a non-failed job does nothing")
 eda.setf(jid, status="failed", error="boom", last_error="[shell] x")
@@ -69,4 +69,6 @@ h = get("/ui/queue"); check("Retry" in h.body and "boom" in h.body, "a failed jo
 h = post(f"/ui/jobs/{jid}/retry", {}); v = eda.job_view(jid)
 check(v["status"] == "queued" and v["retry"] == "1" and eda.R.llen("jobs") == 2, "retry on a failed job requeues it and flags the retry")
 check(get("/ui/jobs/aaaaaaaaaaaa").code == 404, "unknown job is a 404")
+h = H("/ui/jobs"); h.headers = H._Hdr(h.headers); check(ui.handle_post(h) is False and eda.R.llen("jobs") == 2, "POST /ui/jobs (the removed submit form) is not handled and queues nothing")
+h = post("/ui/jobs/aaaaaaaaaaaa/retry", {}); check(h.code == 404, "retrying an unknown job is a 404")
 sys.exit(0 if ok else 1)
