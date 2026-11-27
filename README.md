@@ -11,7 +11,7 @@ An event-driven SRE agent: a Jira label or `POST /events` becomes a validated, d
 | Declared in | the `puck` entry of the catalog | the other entries of `deployment/kubernetes/app/catalog.json` (yours, git-ignored; `sh setup.sh` writes it) |
 | Who merges | you: protect `main`, require review | the target's owners |
 
-One fine-grained PAT (`secrets/git_token`) covers puck plus the targets, **contents and pull requests write, those repos only**. The bot opens draft PRs on `learn/<ticket>` branches and never merges, so learned skills reach the agent only after a human reviews them. Enable branch protection (required review, no bypass) on puck and the targets, because the token alone does not stop a merge.
+One fine-grained PAT (`secrets/git_token`) covers puck plus the targets, **contents and pull requests write, those repos only**. The bot opens draft PRs on `<TICKET>/<change>` branches and never merges, so learned skills reach the agent only after a human reviews them. Enable branch protection (required review, no bypass) on puck and the targets, because the token alone does not stop a merge.
 
 ```
 agent/        the bot's own knowledge: AGENTS.md, skills/, cards/   (read-only to the agent; it learns only via reviewed draft PRs)
@@ -25,7 +25,7 @@ docs/         architecture write-up
 All scripts run from the repo root. Runtime state is git-ignored: `secrets/`, `vendor/`, `.env`.
 
 ## Event flow
-`POST /events` or `POST /webhooks/jira` -> **intake** (validate against `catalog.json`, enqueue in Redis) -> **worker** (A2A to the kagent agent in a gVisor sandbox) -> **gate** (no-LLM lint) -> **publish** (branch `learn/<ticket>`, draft PR). Failures return to the agent as a structured handoff (Objective, Artifact, Evidence, Status, Blockers, Next Action), max 3 attempts.
+`POST /events` or `POST /webhooks/jira` -> **intake** (validate against `catalog.json`, enqueue in Redis) -> **worker** (A2A to the kagent agent in a gVisor sandbox) -> **gate** (no-LLM lint) -> **publish** (branch `<TICKET>/<change>`, draft PR). Failures return to the agent as a structured handoff (Objective, Artifact, Evidence, Status, Blockers, Next Action), max 3 attempts.
 
 New here? Read [docs/getting-started.md](docs/getting-started.md).
 

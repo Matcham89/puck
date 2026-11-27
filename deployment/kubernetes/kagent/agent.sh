@@ -5,5 +5,6 @@
 set -eu
 cd "$(dirname "$0")/../../.."; CTX=kind-event-driven-ai
 kubectl --context $CTX -n kagent delete configmap agent-knowledge --ignore-not-found >/dev/null   # left by earlier versions
+kubectl --context $CTX apply -f deployment/kubernetes/kagent/mcp.yaml
 kubectl --context $CTX apply -f deployment/kubernetes/kagent/agent.yaml
 kubectl --context $CTX -n kagent wait --for=condition=Ready agent/sre-agent --timeout=10m

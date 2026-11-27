@@ -1,0 +1,95 @@
+# Read-only MCP servers the agent can call for facts it cannot get inside the sandbox. None needs a token, so the agent still holds no credentials.
+# Applied by kagent/agent.sh before the agent. To add one: a Deployment+Service (or a hosted URL), a RemoteMCPServer, a `tools` binding in agent.yaml,
+# and its origin in the eda-gate EgressPolicy. A server that needs a token gets none here: put it behind the gate instead.
+#
+# In cluster (images pinned by digest, multi-arch index; both run unprivileged with no API token):
+#   terraform  provider/module docs and schemas from registry.terraform.io (registry toolset only; the HCP Terraform toolset needs a token and is off)
+#   helm       chart search, versions and default values from public Helm repos and OCI registries
+# Hosted (public, no auth; the query text leaves the cluster, so do not put ticket secrets in a prompt):
+#   aws-docs   AWS Knowledge MCP: AWS documentation, API references and best practices
+#   k8s-docs   Context7: current library docs (Kubernetes, Helm, Terraform providers, ...)
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: mcp-terraform, namespace: kagent, labels: {app: mcp-terraform}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mcp-terraform}}
+  template:
+    metadata: {labels: {app: mcp-terraform}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {seccompProfile: {type: RuntimeDefault}, runAsNonRoot: true, runAsUser: 65532}
+      containers:
+      - name: mcp
+        image: hashicorp/terraform-mcp-server@sha256:11dd418bba6003dd5777e9d0979b68de59929a155b355f338f407947e00e9d80
+        args: ["streamable-http", "--transport-host=0.0.0.0", "--toolsets=registry"]
+        ports: [{containerPort: 8080}]
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        resources: {requests: {cpu: 25m, memory: 64Mi}, limits: {memory: 256Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mcp-terraform, namespace: kagent}
+spec: {selector: {app: mcp-terraform}, ports: [{port: 8080, targetPort: 8080}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: mcp-helm, namespace: kagent, labels: {app: mcp-helm}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mcp-helm}}
+  template:
+    metadata: {labels: {app: mcp-helm}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {seccompProfile: {type: RuntimeDefault}, runAsNonRoot: true, runAsUser: 65532}
+      containers:
+      - name: mcp
+        image: ghcr.io/zekker6/mcp-helm@sha256:11fa268abe316b916b7609500e7e65aadb9b7e9e366ee36980beea9acb3aaaef
+        args: ["-mode=http", "-httpListenAddr=:8012"]
+        ports: [{containerPort: 8012}]
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        resources: {requests: {cpu: 25m, memory: 64Mi}, limits: {memory: 256Mi}}
+        volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mcp-helm, namespace: kagent}
+spec: {selector: {app: mcp-helm}, ports: [{port: 8012, targetPort: 8012}]}
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata: {name: terraform-registry, namespace: kagent}
+spec:
+  description: "Terraform Registry docs for providers, modules and policies (read-only, no token)"
+  protocol: STREAMABLE_HTTP
+  url: http://mcp-terraform.kagent.svc.cluster.local:8080/mcp
+  timeout: 30s
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata: {name: helm-charts, namespace: kagent}
+spec:
+  description: "Helm chart search, versions and default values from public repos (read-only, no token)"
+  protocol: STREAMABLE_HTTP
+  url: http://mcp-helm.kagent.svc.cluster.local:8012/mcp
+  timeout: 60s
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata: {name: aws-docs, namespace: kagent}
+spec:
+  description: "AWS Knowledge MCP (hosted by AWS, no auth): documentation, API references, best practices"
+  protocol: STREAMABLE_HTTP
+  url: https://knowledge-mcp.global.api.aws
+  timeout: 30s
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata: {name: k8s-docs, namespace: kagent}
+spec:
+  description: "Context7 (hosted, no key at its free tier): current docs for Kubernetes, Helm and other libraries"
+  protocol: STREAMABLE_HTTP
+  url: https://mcp.context7.com/mcp
+  timeout: 30s
