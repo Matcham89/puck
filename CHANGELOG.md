@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Matcham89/puck/compare/v0.4.0...v0.4.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **linear:** move a picked-up issue to In Progress by name ([b9d5936](https://github.com/Matcham89/puck/commit/b9d59362aa6e5e555f86408fb99393fe6b493a24))
+
 ## [0.4.0](https://github.com/Matcham89/puck/compare/v0.3.1...v0.4.0) (2026-11-27)
 
 
