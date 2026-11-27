@@ -12,7 +12,7 @@ SUBSTRATE_TAG=v1.0.0; KAGENT_TAG=v1.0.1
 free_kb=$(docker run --rm alpine df -Pk / | awk 'NR==2{print $4}'); mem=$(docker info --format '{{.MemTotal}}')
 [ "$free_kb" -ge 15000000 ] || { echo "Docker disk has under 15 GB free; run 'docker system prune' first" >&2; exit 1; }
 [ "$mem" -ge 5500000000 ] || { echo "Docker VM has under ~5.5 GB memory; raise it in Docker/OrbStack settings" >&2; exit 1; }
-[ -s secrets/git_token ] || { echo "missing secrets/git_token: run 'sh setup.sh'" >&2; exit 1; }
+{ [ -s secrets/git_token ] || ls secrets/git_token.* >/dev/null 2>&1; } || { echo "missing secrets/git_token or secrets/git_token.<owner>: run 'sh setup.sh'" >&2; exit 1; }
 [ -s secrets/anthropic_api_key ] || { echo "missing secrets/anthropic_api_key: run 'sh setup.sh'" >&2; exit 1; }
 
 # Pinned tooling: Substrate's cluster script and the kagent CLI (checksum verified).

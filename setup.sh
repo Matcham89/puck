@@ -7,7 +7,8 @@ set -eu
 cd "$(dirname "$0")"
 if [ "${1:-}" = "--check" ]; then
   rc=0
-  for f in secrets/git_token secrets/anthropic_api_key secrets/publish_key secrets/jira_webhook_secret deployment/kubernetes/app/catalog.json; do
+  { [ -s secrets/git_token ] || ls secrets/git_token.* >/dev/null 2>&1; } && echo "ok       secrets/git_token*" || { echo "MISSING  secrets/git_token or secrets/git_token.<owner>"; rc=1; }
+  for f in secrets/anthropic_api_key secrets/publish_key secrets/jira_webhook_secret deployment/kubernetes/app/catalog.json; do
     if [ -s "$f" ]; then echo "ok       $f"; else echo "MISSING  $f"; rc=1; fi
   done
   [ "$rc" = 0 ] || echo "run: sh setup.sh"

@@ -81,7 +81,7 @@ c, r = deliver(None, raw=b"not json"); check(c == 400, "signed but not JSON -> 4
 c, r = deliver(issue(labels=[]), delivery="d0"); check(c == 200 and "ignored" in r and eda.R.llen("jobs") == 0, "valid delivery with no trigger -> 200 ignored (so Jira does not retry), nothing queued")
 c, r = deliver(issue(), delivery="d1"); check(c == 202 and eda.R.llen("jobs") == 1 and r["ticket"] == "SRE-42", "valid trigger -> 202 and one job queued")
 jid = r["id"]; v = eda.job_view(jid)
-check(v["source"]["key"] == "SRE-42" and v["branch"] == "learn/sre-42" and v["ticket_key"] == "SRE-42", "job carries its Jira source and the runtime-owned branch")
+check(v["source"]["key"] == "SRE-42" and v["branch"] == "SRE-42/add-a-rollout-undo-skill" and v["ticket_key"] == "SRE-42", "job carries its Jira source and the runtime-owned branch")
 c, r = deliver(issue(), delivery="d1"); check(c == 200 and r["ignored"] == "duplicate delivery" and eda.R.llen("jobs") == 1, "the same delivery id again -> ignored (Jira retries)")
 c, r = deliver(issue(), delivery="d2"); check(c == 200 and "in flight" in r["ignored"] and eda.R.llen("jobs") == 1, "a new delivery for a ticket that already has a job in flight -> ignored")
 eda.setf(jid, status="published")

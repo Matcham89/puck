@@ -128,7 +128,10 @@ def comment_body(job, status, detail):
     """ADF comment: what happened and where to look."""
     lines = {"published": f"The agent opened a draft PR for {job['ticket_key']}: {detail}",
              "validated-dry-run": f"Dry run for {job['ticket_key']}: the change passed the deterministic checks; nothing was pushed and no PR was opened.",
-             "failed": f"The agent could not complete {job['ticket_key']} after retries. Last report: {detail}"}
+             "no-change": f"The agent made no change for {job['ticket_key']}: {detail}",
+             "failed": f"The agent could not complete {job['ticket_key']} after retries. Last report: {detail}",
+             "ci-failed": f"The draft PR for {job['ticket_key']} is open but CI is still failing: {detail}",
+             "ci-timeout": f"The draft PR for {job['ticket_key']} is open but CI had not finished when the agent stopped waiting: {detail}"}
     text = lines.get(status, f"{job['ticket_key']}: {status}")
     o = job.get("on_behalf_of") or {}
     text += f" (Acted as {job.get('actor', 'the agent')} on behalf of {o.get('name') or o.get('subject', 'unattributed')}; it has its own identity and did not use their credentials.)"

@@ -31,7 +31,7 @@ def handle_get(h):
     if not m: return False
     job = eda.job_view(m.group(1))
     if not job: eda.reply(h, 404, {"error": "unknown job"}); return True
-    active = job.get("status") in ("queued", "running", "agent-done")
+    active = job.get("status") in ("queued", "running", "agent-done", "ci-waiting")
     if m.group(2):          # polled fragment; when the job finishes, ask htmx to reload the whole page once
         page(h, "_events.html", headers={"HX-Refresh": "true"} if ("live=1" in query and not active) else None, events=eda.job_events(job["id"]))
         return True

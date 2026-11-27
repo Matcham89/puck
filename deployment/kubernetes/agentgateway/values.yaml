@@ -39,3 +39,7 @@ config:
       provider: {reference: event-driven-ai}
       transformation:
         model: llmRequest.model.stripPrefix("event-driven-ai/")
+    - name: claude-sonnet-5            # the agent harness sometimes asks for this bare alias on its own (not the ModelConfig's prefixed name); without a route that call is a 404 and kills the job
+      provider: {reference: event-driven-ai}
+      transformation:
+        model: '"claude-sonnet-5-5"'

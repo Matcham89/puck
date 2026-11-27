@@ -15,7 +15,7 @@ import eda; eda.R = FakeR(); EVENTS = []
 import worker; worker.R = eda.R
 worker.emit = lambda jid, st, msg, lvl="info": EVENTS.append(msg)
 worker.jobof = lambda jid: JOB
-JOB = {"actor": "agent:event-driven-ai", "on_behalf_of": {"subject": "jira:acc-9", "name": "Pat Lee", "via": "jira-webhook:d1"}, "id": "abc123abc123", "branch": "learn/sre-7", "dry_run": False, "instruction": "x"}
+JOB = {"actor": "agent:event-driven-ai", "on_behalf_of": {"subject": "jira:acc-9", "name": "Pat Lee", "via": "jira-webhook:d1"}, "id": "abc123abc123", "branch": "learn/sre-7", "dry_run": False, "ci": False, "instruction": "x"}
 sessions, prompts, published = [], [], []
 
 class Resp:

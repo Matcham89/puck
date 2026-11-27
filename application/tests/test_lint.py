@@ -21,6 +21,7 @@ ok = all([
     expect("[shell]" in text and "run.sh" in text, "shellcheck catches the risky script"),
     expect("[json]" in text and "bad.json" in text, "invalid JSON is reported"),
     expect("kubeconform" in text or "[kubernetes]" in text, "kubeconform catches the schema/type errors (chart and plain manifest)"),
+    expect("libchart" not in text, "a valid library chart is not rejected (no helm template)"),
     expect("[yaml] chart/templates" not in text, "Go-templated chart files are not run through yamllint"),
     expect("\x1b[" not in text, "no ANSI colour codes reach the agent"),
     expect("[terraform-fmt] tf/good" not in text, "a fixable file next to a broken one is not reported as an error"),

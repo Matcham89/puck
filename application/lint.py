@@ -108,18 +108,12 @@ def chk_shell(root, changed):
 
 
 def chk_helm(root, changed):
+    """helm lint only. No `helm template` (it cannot render library charts, and rendering is not linting) and no schema downloads."""
     errs = []
     for d in chart_dirs(root, changed):
         rc, out = run(["helm", "lint", "--strict", d], root)
         if rc:
             errs += lines(f"helm lint {d}", "\n".join(l for l in out.splitlines() if "ERROR" in l or "WARNING" in l or "failed" in l))
-            continue
-        rc, rendered = run(["helm", "template", "lint-check", d], root)
-        if rc:
-            errs += lines(f"helm template {d}", rendered); continue
-        rc, out = run(["kubeconform", "-strict", "-ignore-missing-schemas", "-summary", "-"], root, stdin=rendered)
-        if rc:
-            errs += lines(f"kubeconform {d}", out)
     return errs
 
 
@@ -152,6 +146,34 @@ def chk_tflint(root, changed):
 AUTOFIX = {"terraform-fmt": fix_terraform_fmt}
 CHECKS = {"json": chk_json, "yaml": chk_yaml, "shell": chk_shell, "helm": chk_helm,
           "kubernetes": chk_kubernetes, "terraform": chk_terraform, "tflint": chk_tflint}
+
+
+# Anti-cheating gates, deterministic like the linters: the agent may not silence a check, weaken a test or commit a credential to get to green.
+SUPPRESS = re.compile(r"#\s*(noqa|nosec|shellcheck\s+disable|yamllint\s+disable|tflint-ignore)|//\s*(nolint|eslint-disable)|@pytest\.mark\.(skip|xfail)|\.skip\(|\bt\.Skip\(|@Disabled|@Ignore|\bxit\(|\bxdescribe\(", re.I)
+ASSERTION = re.compile(r"\bassert|\bexpect\(|\.should|\brequire\.|\bt\.(Error|Fatal)", re.I)
+TESTFILE = re.compile(r"(^|/)(tests?|__tests__|spec)/|(_test|\.test|\.spec)\.[a-z]+$|(^|/)test_[^/]*$")
+SECRETS = (("AWS access key", re.compile(r"AKIA[0-9A-Z]{16}")), ("private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+           ("GitHub token", re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,}")), ("Slack token", re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}")),
+           ("hardcoded credential", re.compile(r"(password|passwd|secret|token|api[_-]?key)[\"']?\s*[:=]\s*[\"'](?![^\"']*(\$\{|var\.|<|\{\{|example|changeme|xxx))[^\"'\s]{16,}[\"']", re.I)))
+
+
+TFEXEC = re.compile(r'^\s*data\s+"external"|^\s*provisioner\s+"(local|remote)-exec"|source\s*=\s*"hashicorp/external"')   # code that runs during plan/apply with the pipeline's credentials
+
+
+def guard(name, old, new):
+    """Checks on one changed file; old is None for a new file. Only lines the agent added or removed count, so old debt never blocks.
+    shortcut: line-set diff, not a real diff, so a moved line is invisible; upgrade if that ever hides a tampering."""
+    if b"\0" in new:
+        return []
+    n = new.decode(errors="replace").splitlines(); o = old.decode(errors="replace").splitlines() if old is not None else []
+    added = [l for l in n if l not in set(o)]; removed = [l for l in o if l not in set(n)]
+    out = [f"[guard] {name}: adds a check suppression ({l.strip()[:80]}); fix the finding instead of silencing it" for l in added if SUPPRESS.search(l)][:3]
+    if name.endswith((".tf", ".tf.json")):
+        out += [f"[guard] {name}: adds code that runs during plan/apply ({l.strip()[:60]}): `external` data sources and local/remote-exec provisioners are not allowed" for l in added if TFEXEC.search(l)][:3]
+    out += [f"[guard] {name}: looks like a committed secret ({k}); credentials never go in a repo" for l in added for k, rx in SECRETS if rx.search(l)][:3]
+    if old is not None and TESTFILE.search(name):
+        out += [f"[guard] {name}: removes an assertion ({l.strip()[:80]}); an existing test may not be weakened" for l in removed if ASSERTION.search(l)][:3]
+    return out
 
 
 def run_all(root, changed, checks, autofix):
