@@ -17,6 +17,7 @@ KEY_FILE = os.environ.get("LINEAR_KEY_FILE", "/run/secrets/linear/key")
 API = os.environ.get("LINEAR_API_URL", "https://api.linear.app/graphql")
 TRIGGER = os.environ.get("LINEAR_LABEL", "agent")
 REVIEW_STATE = os.environ.get("LINEAR_REVIEW_STATE", "In Review")
+START_STATE = os.environ.get("LINEAR_START_STATE", "In Progress")   # by name: a team can have several "started" states (In Review is one)
 POLL = int(os.environ.get("LINEAR_POLL", "60"))
 
 ISSUES = """query($label: String!) { viewer { id }
@@ -76,7 +77,7 @@ def poll_once():
         try: job = eda.canonical_job(r["event"], trusted=True)
         except ValueError as e: comment(iid, f"I could not queue this: {e}"); continue
         eda.enqueue(job)
-        try: move(iid, lambda s: s["type"] == "started"); comment(iid, f"Picked up as job {job['id']} on {job['service']}. I will comment here with the result.")
+        try: move(iid, lambda s: s["name"] == START_STATE); comment(iid, f"Picked up as job {job['id']} on {job['service']}. I will comment here with the result.")
         except Exception as e: eda.emit(job["id"], "queued", f"picked up, but could not update the Linear issue: {str(e)[:150]}", "warn")
 
 
