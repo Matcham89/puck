@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.0](https://github.com/Matcham89/puck/compare/v0.3.1...v0.4.0) (2026-11-27)
+
+
+### Features
+
+* **agent:** helm and terraform skills, general-only self-learning, MCP docs tools rule ([40b1401](https://github.com/Matcham89/puck/commit/40b1401dc9783ed32db9634ddf185d19c2292e6e))
+* **deploy:** MCP docs servers, reviewer agent, two workers, gateway alias route ([6a61e1d](https://github.com/Matcham89/puck/commit/6a61e1d3aa986ea51819ed38761e9916d4ee9405))
+* **gate:** guards, independent reviewer, CI fix loop, safe learning, evals ([2da0cae](https://github.com/Matcham89/puck/commit/2da0cae4a1be17d5294bdc6222c3132b0b66e43f))
+* hardening from the Tempo fork: reviewer, gate guards, CI loop, MCP tools, safe learning ([f73fa00](https://github.com/Matcham89/puck/commit/f73fa00407f35aab6442fac6dcbf09fb901c5e17))
+* **linear:** package adapter, tests, deployment wiring, docs ([f146ede](https://github.com/Matcham89/puck/commit/f146edec39e57251b0e1c8e80825309209805e3f))
+* **linear:** polling adapter (Phase 1, live API unverified) ([5b93ab0](https://github.com/Matcham89/puck/commit/5b93ab04a5c637c013e068ab76715168003d65f6))
+* the agent reads its rules, cards and skills from main on every job ([bdda588](https://github.com/Matcham89/puck/commit/bdda588ad7d8cd5ec51e9610e94ab182ab76a68d))
+
+
+### Bug Fixes
+
+* portable kagent CLI download, tool preflight, honest prerequisites ([37b75b3](https://github.com/Matcham89/puck/commit/37b75b39cb6563fbd90c6d499fb72d5f77e23ee0))
+
+
+### Documentation
+
+* record of the hardening changes and a personal-agent plan ([d90ad17](https://github.com/Matcham89/puck/commit/d90ad1779d1471ac667af96d1c59a2c717caceee))
+
 ## [0.3.1](https://github.com/Matcham89/puck/compare/v0.3.0...v0.3.1) (2026-11-23)
 
 
