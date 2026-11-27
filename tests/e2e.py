@@ -103,13 +103,7 @@ def test_intake(intake):
     s, _ = call("GET", f"{intake}/jobs/aaaaaaaaaaaa")
     check(s == 404, "unknown job id is a 404")
     s, b = call("GET", f"{intake}/")
-    check(s == 200 and "Event-Driven AI" in b and "my-service" in b, "the UI loads and lists the catalog's services")
-    req = urllib.request.Request(f"{intake}/ui/jobs", data=b"text=short&service=my-service", method="POST")
-    try:
-        urllib.request.urlopen(req, timeout=10); code, page = 200, ""
-    except urllib.error.HTTPError as e:
-        code, page = e.code, e.read().decode()
-    check(code == 400 and "Not accepted" in page, "the UI form rejects a too-short instruction with the reason")
+    check(s == 200 and "Event-Driven AI" in b and 'action="/ui/jobs"' not in b, "the UI loads and has no submit form (jobs and logs only)")
 
 
 def test_isolation(intake):

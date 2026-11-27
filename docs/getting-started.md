@@ -90,9 +90,9 @@ Rebuild and redeploy after a code or catalog change: `sh deployment/kubernetes/a
 kubectl --context kind-event-driven-ai -n eda port-forward svc/intake 8080:8080 &
 curl -s localhost:8080/events -d '{"service":"<catalog key>","instruction":"Describe the change you want, at least ten characters","dry_run":true}'
 ```
-Open http://localhost:8080 for the queue, stage chips and event log. Drop `dry_run` to get a draft PR on branch `<TICKET>/<change>` (for example `SRE-123/add-rollout-undo-skill`).
+Open http://localhost:8080 to follow jobs: the job list (status, PR link; the Repo dropdown filters it by catalog service, `/?service=<catalog key>`) and, per job, stage chips, validator results and the event log. A failed job's own page has a Retry button. The UI does not create jobs or tickets: use `/events`, Jira or Linear. Drop `dry_run` to get a draft PR on branch `<TICKET>/<change>` (for example `SRE-123/add-rollout-undo-skill`).
 
-Events from `/events` and the UI are recorded as **unattributed**. Jira events are attributed to the person who added the trigger label (see below).
+Events from `/events` are recorded as **unattributed**. Jira events are attributed to the person who added the trigger label (see below).
 
 ### 5. Jira (optional)
 Point a Jira Cloud webhook at `/webhooks/jira` with the secret from `secrets/jira_webhook_secret`, then add the label `ai-agent` to a ticket (`ai-dry-run` too for a dry run). Try it without Jira: `python3 application/sim/jira.py create SRE-201 "Summary" "Description" --labels ai-agent,ai-dry-run`. For real Jira write-back set `JIRA_BASE_URL` on the worker and create the `jira-api` secret (see the comment in `eda.yaml`).

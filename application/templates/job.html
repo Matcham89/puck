@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% from "_time.html" import when %}{% block body %}
 <h2>{{ job.title or job.instruction[:80] }}</h2>
-<p class="s-{{ job.css }}"><b>{{ job.label }}</b> · repo: {{ job.repo }} · branch: <code>{{ job.branch }}</code>{% if job.ticket_key %} · ticket: {{ job.ticket_key }}{% endif %}
+<p class="s-{{ job.css }}"><b>{{ job.label }}</b> · repo: {{ job.repo }} · branch: <code>{{ job.branch }}</code>
  · attempts: {{ job.attempts or '-' }}{% if job.dry_run == True or job.dry_run == 'True' %} · <b>dry run</b>{% endif %}</p>
 <p><small>Triggered {{ when(job.created_at) }} · last update {{ when(job.updated_at) }}</small></p>
 <div>{% set ns = namespace(seen=false) %}{% for s in stages %}

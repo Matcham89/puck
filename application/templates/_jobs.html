@@ -1,5 +1,5 @@
-{% from "_time.html" import when %}<table><tr><th>Task</th><th>Triggered</th><th>Status</th><th>Stage</th><th>Attempts</th><th>PR</th></tr>
-{% for j in jobs %}<tr><td><a href="/ui/jobs/{{ j.id }}">{{ j.title or j.instruction[:60] }}</a>{% if j.ticket_key %} <small class="muted">{{ j.ticket_key }}</small>{% endif %}</td><td>{{ when(j.created_at) }}</td>
+{% from "_time.html" import when %}<table><tr><th>Job</th><th>Triggered</th><th>Status</th><th>Stage</th><th>Attempts</th><th>PR</th></tr>
+{% for j in jobs %}<tr><td><a href="/ui/jobs/{{ j.id }}">{{ j.title or j.instruction[:60] }}</a></td><td>{{ when(j.created_at) }}</td>
 <td class="s-{{ j.css }}">{{ j.label }}</td><td>{{ j.stage }}</td><td>{{ j.attempts or '-' }}</td>
 <td>{% if j.pr_url %}<a href="{{ j.pr_url }}">draft</a>{% endif %}</td></tr>
-{% else %}<tr><td colspan="6">No tasks yet.</td></tr>{% endfor %}</table>
+{% else %}<tr><td colspan="6">No jobs yet.</td></tr>{% endfor %}</table>
