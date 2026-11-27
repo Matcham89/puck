@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0](https://github.com/Matcham89/puck/compare/v0.4.1...v0.5.0) (2026-11-27)
+
+
+### Features
+
+* **deploy:** agentgateway request log with prompts, 4 substrate workers, kagent UI on ([7133314](https://github.com/Matcham89/puck/commit/7133314be0d8d727b40cc31ee3700cb6a3cba557))
+* **deploy:** agentgateway request log, 4 substrate workers, kagent UI on ([bbc853f](https://github.com/Matcham89/puck/commit/bbc853f4ca7bab7ba6619e88a4de7ca51bafd722))
+* **gate:** one revision round when the independent review raises concerns ([7699a2b](https://github.com/Matcham89/puck/commit/7699a2b9cd0b4225ea9afd23db30a394ad593a5f))
+* **gate:** one revision round when the independent review raises concerns ([f2ca16f](https://github.com/Matcham89/puck/commit/f2ca16fbb88c0033eb30628581c7c1bfdf33c8b1))
+
 ## [0.4.1](https://github.com/Matcham89/puck/compare/v0.4.0...v0.4.1) (2026-11-27)
 
 
