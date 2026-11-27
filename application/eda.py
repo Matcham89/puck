@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """event-driven-ai services in one file: intake (service catalog + queue), gate (validator + publisher), worker (see worker.py)."""
-import lint, base64, glob, hashlib, io, json, os, re, shutil, subprocess, sys, tarfile, tempfile, time, urllib.request, uuid
+import lint, base64, glob, hashlib, io, json, os, re, shutil, subprocess, sys, tarfile, tempfile, time, urllib.error, urllib.parse, urllib.request, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import redis
 
@@ -28,7 +28,7 @@ def body_of(h):
     return h.rfile.read(n)
 
 # ---------- job record: what the UI shows (status/stage/title/timestamps) and an event log ----------
-STAGES = ["queued", "agent", "validate", "publish", "done"]
+STAGES = ["queued", "agent", "validate", "publish", "ci", "done"]
 def now_iso(): return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 def setf(jid, **fields):
@@ -53,8 +53,8 @@ def job_view(jid):
     job = json.loads(d.pop("job", "null") or "null") or {}
     v = {**job, **d, "id": jid}
     st = d.get("status", "queued")
-    v["css"] = {"queued": "queued", "running": "in_progress", "agent-done": "in_progress", "validated-dry-run": "finished", "published": "finished", "failed": "failed"}.get(st, "queued")
-    v["label"] = {"validated-dry-run": "validated (dry run)", "agent-done": "checking"}.get(st, st)
+    v["css"] = {"queued": "queued", "running": "in_progress", "agent-done": "in_progress", "ci-waiting": "in_progress", "validated-dry-run": "finished", "no-change": "finished", "published": "finished", "failed": "failed", "ci-failed": "failed", "ci-timeout": "failed"}.get(st, "queued")
+    v["label"] = {"validated-dry-run": "validated (dry run)", "no-change": "no change made", "agent-done": "checking", "ci-waiting": "waiting for CI"}.get(st, st)
     return v
 
 def list_jobs(n=50):
@@ -79,6 +79,15 @@ def source_of(ev):
 ACTOR = "agent:event-driven-ai"
 UNATTRIBUTED = {"subject": "unattributed", "name": "", "via": "unauthenticated-intake"}
 
+def branch_name(key, ins, jid):
+    """<TICKET>/<what-the-change-is>, e.g. SRE-13168/nginx-applies-content-security-policy-header. No ticket: <what>-<id6>, which can never equal a base branch."""
+    slug = ""
+    for w in re.findall(r"[a-z0-9]+", ins.strip().splitlines()[0].lower())[:6]:   # whole words only, at most 48 chars
+        if len(slug) + len(w) + 1 > 48: break
+        slug = f"{slug}-{w}" if slug else w
+    slug = slug or "change"
+    return f"{key}/{slug}" if key else f"{slug}-{jid[:6]}"
+
 def canonical_job(ev, trusted=False):
     """trusted=True only for callers that authenticated the requester themselves (the HMAC-checked Jira webhook).
     Anyone else cannot name the user the agent acts for, or claim a Jira source: both come from the caller, not the request body."""
@@ -89,9 +98,9 @@ def canonical_job(ev, trusted=False):
     key = ev.get("ticket_key", "")
     if key and not re.fullmatch(r"[A-Z][A-Z0-9]+-\d+", key): raise ValueError("ticket_key must look like SRE-123")
     c = CATALOG[svc]; jid = uuid.uuid4().hex[:12]
-    branch = "learn/" + re.sub(r"[^a-z0-9-]", "-", (key or jid).lower())[:50]    # decided here, once; the agent never picks it
+    branch = branch_name(key, ins, jid)    # decided here, once; the agent never picks it
     return {"id": jid, "service": svc, "ticket_key": key, "repo": c["repo"], "base_branch": c["base_branch"], "branch": branch,
-            "allowed_paths": c["allowed_paths"], "owner": c["owner"], "lint": c.get("lint", []), "autofix": c.get("autofix", []),
+            "allowed_paths": c["allowed_paths"], "owner": c["owner"], "ci": c.get("ci", True), "lint": c.get("lint", []), "autofix": c.get("autofix", []),
             "instruction": ins.strip(), "dry_run": bool(ev.get("dry_run", False)), "source": source_of(ev) if trusted else {"type": "api"},
             "actor": ACTOR, "on_behalf_of": {k: str(v)[:120] for k, v in ev["on_behalf_of"].items()} if trusted and isinstance(ev.get("on_behalf_of"), dict) else UNATTRIBUTED}
 
@@ -122,19 +131,39 @@ def sh(cmd, cwd=None, env=None, check=True):
     return r
 
 def scrub(t):
-    tok = token()
-    return str(t).replace(tok, "***") if tok else str(t)
+    t = str(t)
+    for tok in all_tokens(): t = t.replace(tok, "***")
+    return t
 
-def token(): return open("/run/secrets/git/token").read().strip() if os.path.exists("/run/secrets/git/token") else ""
-def remote(job): return f"https://x-access-token:{token()}@github.com/{job['repo']}.git" if token() else f"https://github.com/{job['repo']}.git"
+GIT_SECRETS = "/run/secrets/git"
+def _read(name):
+    p = f"{GIT_SECRETS}/{name}"
+    return open(p).read().strip() if os.path.isfile(p) else ""
+def token(repo=""): return _read(repo.split("/")[0].lower()) or _read("token")   # file named after the owner, else the shared "token"
+def all_tokens(): return [t for n in (os.listdir(GIT_SECRETS) if os.path.isdir(GIT_SECRETS) else []) if (t := _read(n))]
+def remote(job):
+    tok = token(job["repo"])
+    return f"https://x-access-token:{tok}@github.com/{job['repo']}.git" if tok else f"https://github.com/{job['repo']}.git"
 def jobof(jid): return json.loads(R.hget(f"job:{jid}", "job") or "null")
 
 def fresh_clone(job, dest):
-    sh(["git", "clone", "-q", "--depth", "1", "--branch", job["base_branch"], remote(job), dest])
-    sh(["git", "fetch", "-q", "--depth", "1", "origin", job["base_branch"]], cwd=dest)
+    br = job.get("work_branch") or job["base_branch"]      # a CI fix round continues from the PR branch, not from base
+    sh(["git", "clone", "-q", "--depth", "1", "--branch", br, remote(job), dest])
+    sh(["git", "fetch", "-q", "--depth", "1", "origin", br], cwd=dest)
 
-def allowed(path, job):
-    return not path.startswith("/") and ".." not in path.split("/") and any(path == a or (a.endswith("/") and path.startswith(a)) for a in job["allowed_paths"])
+def allowed(path, job):   # "*" in allowed_paths means the whole repo, but never git internals
+    return (not path.startswith("/") and ".." not in path.split("/") and path.split("/")[0] != ".git"
+            and any(a == "*" or path == a or (a.endswith("/") and path.startswith(a)) for a in job["allowed_paths"]))
+
+PROTECTED = re.compile(r"^(\.github/|\.buildkite/|\.circleci/|Jenkinsfile$|\.gitlab-ci\.yml$)|(^|/)(CODEOWNERS|\.pre-commit-config\.yaml|\.tflint\.hcl|\.yamllint(\.ya?ml)?|\.shellcheckrc)$")
+def protected(path, job):   # CI and lint config run with the repo's secrets or judge the agent's own work: the agent never edits them (catalog `allow_protected` opts a repo out)
+    return not job.get("allow_protected") and bool(PROTECTED.search(path))
+
+def diff_of(job, cap=60000):
+    """What the agent's change looks like against base (the gate's overlay on a fresh clone), for the independent reviewer."""
+    r = f"{DATA}/work/{job['id']}/r"
+    sh(["git", "add", "-N", "."], cwd=r); d = sh(["git", "diff", "HEAD", "--no-color"], cwd=r).stdout
+    return d[:cap] + (f"\n... diff truncated at {cap} chars ({len(d)} total)" if len(d) > cap else "")
 
 SUBMIT_SH = r"""#!/bin/sh
 # Uploads ONLY what changed since the snapshot (plus PR.md), retries transport failures, prints the gate's JSON reply.
@@ -179,7 +208,7 @@ def snapshot(job, restore=False):
         return buf.getvalue()
 
 SKIP_DIRS = ".git|node_modules|vendor|.terraform|__pycache__|.venv|dist|build"
-DOC_CAPS = (("CLAUDE.md", 8000), ("AGENTS.md", 8000), ("CONTRIBUTING.md", 6000), ("README.md", 4000))   # the repo's own rules first
+DOC_CAPS = (("CLAUDE.md", 16000), ("AGENTS.md", 8000), ("CONTRIBUTING.md", 6000), ("README.md", 4000))   # the repo's own rules first
 
 def clip(text, n):
     text = text.strip()
@@ -232,12 +261,32 @@ def knowledge():
     os.makedirs(os.path.dirname(cache), exist_ok=True); open(cache, "w").write(text)
     return text
 
+LESSON_ID = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b|\b[a-f0-9]{12}\b")     # ticket keys and job ids: one run's story, not a lesson
+def lesson_check(job, root, changed):
+    """Deterministic limits for a self-learning job (it may only write skills and cards). A lesson is general, short and bounded:
+    no ticket keys, job ids or other target repos by name; cards at most 15 lines, skills 40 lines and 8000 chars (what the gate loads);
+    and the whole agent/ knowledge stays under 80% of what the gate can load, so lessons never silently push a skill past the cut."""
+    errs = []
+    own = next((k for k, v in CATALOG.items() if v.get("knowledge")), None)
+    names = {n for k, v in CATALOG.items() if k != own for n in (k, v["repo"])}
+    for f in changed:
+        text = open(f"{root}/{f}", errors="replace").read(); n = len(text.splitlines())
+        card = f.startswith("agent/cards/"); limit = 15 if card else 40
+        if n > limit: errs.append(f"[lesson] {f}: {n} lines; a {'card' if card else 'skill'} is at most {limit}. Say it shorter, or split the idea.")
+        if not card and len(text) > 8000: errs.append(f"[lesson] {f}: {len(text)} characters; the gate cuts a skill at 8000.")
+        if m := LESSON_ID.search(text): errs.append(f"[lesson] {f}: mentions {m.group()!r}; a lesson is general, with no ticket key or job id.")
+        for name in sorted(names):
+            if re.search(r"(?<![\w-])" + re.escape(name) + r"(?![\w-])", text, re.I): errs.append(f"[lesson] {f}: names the target repo {name!r}; a lesson must help on other repos too."); break
+    total = sum(len(open(p, errors="replace").read()) for p in glob.glob(f"{root}/agent/**/*", recursive=True) if os.path.isfile(p))
+    if total > KNOWLEDGE_CAP * 0.8: errs.append(f"[lesson] agent/ holds {total} characters, over 80% of the {KNOWLEDGE_CAP} the gate loads: consolidate existing cards and skills before adding more.")
+    return errs
+
 def submit(job, data):
     """Overlay the uploaded tree on a fresh clone of base, run the deterministic lint. Returns (ok, message)."""
     w = f"{DATA}/work/{job['id']}"; shutil.rmtree(w, ignore_errors=True); os.makedirs(w)
     open(f"{DATA}/work/{job['id']}.last.tgz", "wb").write(data)    # lets a retry restore its work if the sandbox was reset
     fresh_clone(job, f"{w}/r")
-    pr = None; changed = []
+    pr = None; learned = ""; changed = []; bad = []
     try: tf = tarfile.open(fileobj=io.BytesIO(data), mode="r:gz"); members = tf.getmembers()
     except (EOFError, tarfile.TarError, OSError) as e:
         return False, f"upload is not a complete .tar.gz ({len(data)} bytes received: {e}). Rebuild the archive and upload it again."
@@ -247,10 +296,15 @@ def submit(job, data):
             if m.isdir() or name == "" or name.startswith(".eda/"): continue
             if not m.isfile(): return False, f"{name}: only regular files allowed"
             if name == "PR.md": pr = tf.extractfile(m).read().decode(); continue
+            if name == "LEARNED.md": learned = tf.extractfile(m).read().decode(errors="replace").strip()[:2000]; continue   # a lesson for puck, never part of the target PR
             content = tf.extractfile(m).read(); dst = f"{w}/r/{name}"
             if os.path.exists(dst) and open(dst, "rb").read() == content: continue     # unchanged files are not changes
             if not allowed(name, job): return False, f"{name}: outside allowed paths {job['allowed_paths']}"
+            if protected(name, job): return False, f"{name}: protected path (CI and lint config): the agent may not change it. Leave it as it is and describe the change you would make in PR.md"
+            bad += lint.guard(name, open(dst, "rb").read() if os.path.exists(dst) else None, content)
             os.makedirs(os.path.dirname(dst), exist_ok=True); open(dst, "wb").write(content); changed.append(name)
+    if (job.get("source") or {}).get("type") == "learning": bad += lesson_check(job, f"{w}/r", changed)
+    if bad: return False, scrub("\n".join(bad))
     if not pr: return False, "PR.md missing: line 1 is the PR title, the rest is the description (where it went and why)"
     root = f"{w}/r"
     # Deterministic phase, no LLM: formatters fix files in place, linters report. Only reports go back to the agent.
@@ -259,35 +313,115 @@ def submit(job, data):
     if "playbook" in job.get("lint", []):
         r = sh(["/usr/local/bin/playbook-check.sh"], cwd=root, env={"PLAYBOOK_DIR": root}, check=False)
         if r.returncode: return False, scrub((r.stdout + r.stderr).strip()[-1500:])
-    R.hset(f"job:{job['id']}", mapping={"validated": hashlib.sha256(data).hexdigest(), "pr": pr, "title": pr.splitlines()[0].lstrip("# ").strip()[:120] or "(untitled)"})
+    R.hset(f"job:{job['id']}", mapping={"validated": hashlib.sha256(data).hexdigest(), "pr": pr, "files": json.dumps(changed), **({"learned": learned} if learned else {}), "title": pr.splitlines()[0].lstrip("# ").strip()[:120] or "(untitled)"})
     return True, "checks passed" + (f"; auto-formatted: {', '.join(fixed)}" if fixed else "")
 
 def obo_line(job):
     o = job.get("on_behalf_of") or {}
     return f"{job.get('actor', ACTOR)} on behalf of {o.get('subject', 'unattributed')}" + (f" ({o['name']})" if o.get("name") else "") + f", via {o.get('via', '?')}"
 
+def gh(job, path, method="GET", data=None):
+    req = urllib.request.Request(f"https://api.github.com/repos/{job['repo']}/{path}", method=method, data=None if data is None else json.dumps(data).encode(),
+        headers={"Authorization": f"Bearer {token(job['repo'])}", "Accept": "application/vnd.github+json", "User-Agent": "event-driven-ai"})
+    return urllib.request.urlopen(req, timeout=30)
+
+def branch_taken(w, branch):
+    """True if the remote already has this branch. A rerun of a ticket reuses the branch name, and a push to it is rejected with a bare 'fetch first'."""
+    return bool(sh(["git", "ls-remote", "--heads", "origin", f"refs/heads/{branch}"], cwd=w).stdout.strip())
+
 def publish(job):
     pr = R.hget(f"job:{job['id']}", "pr")
     if not R.hget(f"job:{job['id']}", "validated") or not pr: raise RuntimeError("no validated submission for this job")
     w = f"{DATA}/work/{job['id']}/r"
-    branch = job["branch"]
+    branch = job["branch"]; fix = bool(job.get("work_branch"))
     title = pr.splitlines()[0].lstrip("# ").strip()[:200]; body = "\n".join(pr.splitlines()[1:]).strip()
     if job["ticket_key"] and job["ticket_key"] not in title: title = f"{job['ticket_key']}: {title}"
+    if not fix and branch_taken(w, branch):
+        raise RuntimeError(f"branch {branch} already exists on {job['repo']} (an earlier run of this ticket, or a closed PR whose branch was not deleted). Delete the branch on GitHub, then retry.")
     sh(["git", "checkout", "-q", "-B", branch], cwd=w)
     sh(["git", "add", "-A"], cwd=w)
-    sh(["git", "-c", "user.name=event-driven-agent", "-c", "user.email=agent@localhost", "commit", "-q", "-m", title, "-m", f"On-Behalf-Of: {obo_line(job)}"], cwd=w)
-    sh(["git", "push", "-q", "origin", f"refs/heads/{branch}:refs/heads/{branch}"], cwd=w)   # explicit refspec, learn/* only
-    req = urllib.request.Request(f"https://api.github.com/repos/{job['repo']}/pulls", method="POST", data=json.dumps(
-        {"title": title, "head": branch, "base": job["base_branch"], "draft": True, "body": body + "\n\n---\n" f"Draft opened by {obo_line(job)}. The agent has its own identity and did not impersonate the requester. Merging needs a human review of this draft."}).encode(),
-        headers={"Authorization": f"Bearer {token()}", "Accept": "application/vnd.github+json", "User-Agent": "event-driven-ai"})
-    url = json.load(urllib.request.urlopen(req, timeout=30))["html_url"]
+    sh(["git", "-c", "user.name=event-driven-agent", "-c", "user.email=agent@localhost", "commit", "-q", "-m", "Address CI failures" if fix else title], cwd=w)
+    sh(["git", "push", "-q", "origin", f"refs/heads/{branch}:refs/heads/{branch}"], cwd=w)   # explicit refspec, never forced: a fix round fast-forwards its own branch
+    if fix:   # the PR exists: its title and body now describe the whole change as the agent last wrote it
+        url = R.hget(f"job:{job['id']}", "pr_url")
+        gh(job, f"pulls/{url.rsplit('/', 1)[1]}", "PATCH", {"title": title, "body": body}).read()
+    else:
+        url = json.load(gh(job, "pulls", "POST", {"title": title, "head": branch, "base": job["base_branch"], "draft": True, "body": body}))["html_url"]
     R.hset(f"job:{job['id']}", mapping={"status": "published", "pr_url": url, "branch": branch})
     return url
 
+# ---------- CI: what GitHub says about the pushed branch ----------
+CI_BAD = ("failure", "timed_out", "cancelled", "action_required", "error")
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k): return None
+
+def job_log(job, job_id):
+    """An Actions job log. GitHub answers 302 to a signed storage URL: follow it WITHOUT our token."""
+    req = urllib.request.Request(f"https://api.github.com/repos/{job['repo']}/actions/jobs/{job_id}/logs",
+        headers={"Authorization": f"Bearer {token(job['repo'])}", "Accept": "application/vnd.github+json", "User-Agent": "event-driven-ai"})
+    try: return urllib.request.build_opener(_NoRedirect).open(req, timeout=30).read().decode(errors="replace")
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"): return urllib.request.urlopen(e.headers["Location"], timeout=60).read().decode(errors="replace")
+        raise
+
+def log_tail(log, lines=40, cap=4000):
+    ls = [re.sub(r"^\ufeff?\d{4}-\d\d-\d\dT[\d:.]+Z ", "", lint.ANSI.sub("", l)) for l in log.splitlines()]
+    errs = [l for l in ls if "##[error]" in l][:15]
+    return scrub("\n".join(errs + (["--- last lines ---"] if errs else []) + ls[-lines:]))[:cap]
+
+def rollup(job):
+    """GitHub's overall verdict for the branch head. It includes checks this token cannot list (CodeQL, Cycode), so it is the only way to see them without Checks: read.
+    Returns {state, total} or None if GitHub will not say."""
+    o, n = job["repo"].split("/")
+    q = {"query": "query($o:String!,$n:String!,$r:String!){repository(owner:$o,name:$n){ref(qualifiedName:$r){target{... on Commit{statusCheckRollup{state contexts(first:1){totalCount}}}}}}}",
+         "variables": {"o": o, "n": n, "r": "refs/heads/" + job["branch"]}}
+    req = urllib.request.Request("https://api.github.com/graphql", data=json.dumps(q).encode(), headers={"Authorization": f"Bearer {token(job['repo'])}", "User-Agent": "event-driven-ai"})
+    try: d = json.load(urllib.request.urlopen(req, timeout=30))["data"]["repository"]["ref"]["target"]["statusCheckRollup"]
+    except Exception: return None
+    return {"state": d["state"], "total": d["contexts"]["totalCount"]} if d else None
+
+def ci_status(job):
+    """state: pending | none | success | failure. On failure, the tail of each failed check's log (at most 5): this is what a fix round is given."""
+    sha = json.load(gh(job, "git/ref/heads/" + urllib.parse.quote(job["branch"], safe="/")))["object"]["sha"]
+    hidden = None
+    try:   # Checks: read also shows app checks (Cycode, CodeQL). Without it, fall back to the Actions jobs (they carry the logs) plus GitHub's overall rollup for the rest.
+        runs = [{"name": c["name"], "id": c["id"], "app": c["app"]["slug"], "status": c["status"], "conclusion": c["conclusion"], "output": c.get("output")}
+                for c in json.load(gh(job, f"commits/{sha}/check-runs?per_page=100"))["check_runs"]]
+    except urllib.error.HTTPError as e:
+        if e.code != 403: raise
+        hidden = rollup(job)
+        runs = [{"name": j["name"], "id": j["id"], "app": "github-actions", "status": j["status"], "conclusion": j["conclusion"], "output": None}
+                for r in json.load(gh(job, f"actions/runs?head_sha={sha}&per_page=50"))["workflow_runs"] for j in json.load(gh(job, f"actions/runs/{r['id']}/jobs?per_page=100"))["jobs"]]
+    stat = json.load(gh(job, f"commits/{sha}/status"))["statuses"]
+    items = [{"name": c["name"], "id": c["id"], "app": c["app"], "done": c["status"] == "completed", "conclusion": c["conclusion"], "note": (c.get("output") or {}).get("title") or ""} for c in runs]
+    items += [{"name": x["context"], "id": None, "app": "status", "done": x["state"] != "pending", "conclusion": x["state"], "note": x.get("description") or ""} for x in stat]
+    pending = [i["name"] for i in items if not i["done"]]; bad = [i for i in items if i["done"] and i["conclusion"] in CI_BAD]
+    state = "pending" if pending else "none" if not items else "failure" if bad else "success"
+    total = len(items)
+    if hidden:   # the rollup counts every check, including the ones this token cannot list
+        total = max(total, hidden["total"])
+        if hidden["state"] in ("PENDING", "EXPECTED") and state != "pending": state = "pending"; pending = ["checks this token cannot list"]
+        elif hidden["state"] in ("FAILURE", "ERROR") and state != "failure": state = "blind"
+        elif hidden["state"] == "SUCCESS" and state == "none": state = "success"
+    out = {"sha": sha, "state": state, "total": total, "pending": pending, "failed": []}
+    for i in bad[:5] if state == "failure" else []:
+        try: log = log_tail(job_log(job, i["id"])) if i["app"] == "github-actions" else i["note"]
+        except Exception as e: log = f"(log unavailable: {str(e)[:120]})"
+        out["failed"].append({"name": i["name"], "conclusion": i["conclusion"], "log": log or "(no output)"})
+    return out
+
 class Gate(BaseHTTPRequestHandler):
     def do_GET(self):
-        m = re.fullmatch(r"/(snapshot|restore|last|brief|knowledge)/([a-f0-9]{12})", self.path); job = m and jobof(m.group(2))
+        m = re.fullmatch(r"/(snapshot|restore|last|brief|knowledge|ci|diff)/([a-f0-9]{12})", self.path); job = m and jobof(m.group(2))
         if not job: return reply(self, 404, {"error": "unknown job"})
+        if m.group(1) == "ci":
+            try: return reply(self, 200, ci_status(job))
+            except urllib.error.HTTPError as e: return reply(self, e.code if e.code in (401, 403, 404) else 502, {"error": f"GitHub answered {e.code} {scrub(e.reason)}"})
+            except Exception as e: return reply(self, 502, {"error": scrub(e)})
+        if m.group(1) == "diff":
+            try: return reply(self, 200, None, raw=scrub(diff_of(job)).encode(), ctype="text/plain")
+            except Exception as e: return reply(self, 500, {"error": scrub(e)})
         if m.group(1) == "knowledge":
             try: return reply(self, 200, None, raw=scrub(knowledge()).encode(), ctype="text/plain")
             except Exception as e: return reply(self, 500, {"error": scrub(e)})

@@ -8,6 +8,7 @@
 {% if s == job.stage %}{% set ns.seen = true %}{% endif %}{% endfor %}</div>
 <pre>{{ job.instruction }}</pre>
 {% if job.pr_url %}<p>Draft PR: <a href="{{ job.pr_url }}">{{ job.pr_url }}</a></p>{% endif %}
+{% if job.ci %}<p>CI: {{ job.ci }}</p>{% endif %}
 {% if job.status == 'failed' %}<h3>Error</h3><pre>{{ job.error }}</pre>
 <form method="post" action="/ui/jobs/{{ job.id }}/retry"><button>Retry</button> <small class="muted">(restores the last upload in a fresh session; only what the checks reported is fixed)</small></form>{% endif %}
 {% if subs %}<h3>Validator results</h3>
