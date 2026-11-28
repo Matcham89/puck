@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.1](https://github.com/Matcham89/puck/compare/v0.5.0...v0.5.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **gate:** three review rounds, reachable restore URL, park finished-without-PR tickets ([fe73b3d](https://github.com/Matcham89/puck/commit/fe73b3d7eb32b5fe06df1ce81ccc514cf6db46db))
+
+
+### Documentation
+
+* where we are, the improve loop and the known gaps ([69a0423](https://github.com/Matcham89/puck/commit/69a04233b1498320fb5056e04066c6737fd650be))
+
 ## [0.5.0](https://github.com/Matcham89/puck/compare/v0.4.1...v0.5.0) (2026-11-27)
 
 
