@@ -1,6 +1,6 @@
 # Personal agent plan: Linear in, reviewed draft PRs out
 
-Status (2026-11-27): Phase 1 works end to end on a local kind cluster against live Linear and a real repo (`home-cluster`); now in the improve loop below. Goal: use puck as a personal ticket-workload tool that works the same at any company or on side projects. File tickets in Linear, let agents work as many as I like in parallel, review the draft PRs, and widen what the agent may do only as the evidence earns it.
+Status (2026-11-28): Phase 1 works end to end on a local kind cluster against live Linear and a real repo (`home-cluster`); now in the improve loop below. Goal: use puck as a personal ticket-workload tool that works the same at any company or on side projects. File tickets in Linear, let agents work as many as I like in parallel, review the draft PRs, and widen what the agent may do only as the evidence earns it.
 
 ## Where we are
 **Working, verified live** (local kind cluster, Linear team CHR, target `Matcham89/home-cluster`, about 22 tickets over five rounds):
@@ -11,11 +11,11 @@ Status (2026-11-27): Phase 1 works end to end on a local kind cluster against li
 - CI on `home-cluster` is `flate` (replaced the deprecated flux-local, whose test job had only been checking 5 Kustomizations); a PR's `Test` renders the whole tree.
 - Observability: agentgateway keeps a request log with prompts (`llm: full`), the kagent UI is on, the substrate worker pool runs 4 workers. Web UI is jobs and logs only, with a repo filter.
 
-**Merged:** #11 adapter, #12 start state by name, #13 jobs-and-logs UI, #15 gateway logging + 4 substrate workers, #16 review loop on concerns. **Open:** the branch with three review rounds, a restore URL the sandbox can resolve, and parking of failed / no-change / dry-run tickets in Backlog.
+**Merged:** #11 adapter, #12 start state by name, #13 jobs-and-logs UI, #15 gateway logging + 4 substrate workers, #16 review loop on concerns, #18 three review rounds + reachable restore URL + Backlog parking. **Open:** the round F hardening branch (below).
 
 **Known gaps** (each becomes a gate, an eval case or a fix, not more prompt text):
-- **Wrong Helm values pass review and CI.** Found in the CHR-25 rerun (above): a values key set to the wrong type for the chart. Reviewer verdicts vary between runs, and rendering cleanly is not the same as being correct. Next: a deterministic check that every value a HelmRelease sets has the type of the chart's own default for that key (the chart's `values.yaml` is the source of truth), plus this case in the evals.
-- A vague ticket ("make the cluster more reliable") got an invented change instead of a stop. Needs a deterministic "not enough to act on" path that parks the ticket with a question.
+- **Wrong Helm values type.** Built (`helm-values` lint, `lint.type_diffs`): a HelmRelease value whose type differs from the chart's own `helm show values` default is rejected. Limits: keys the chart leaves commented out or null have no default to compare, and a chart that cannot be fetched is skipped. The CHR-25 case that prompted it was a misdiagnosis: qdrant chart 1.18.2 does support `apiKey.valueFrom` (it reads the secret with `lookup` at render time), so a human should still check ordering (the Secret must exist before the HelmRelease renders).
+- Vague tickets: the job wrapper now tells the agent to change no file and ask (`Question:` in PR.md); it is parked in Backlog. It is a prompt rule, so it has an eval case (`vague ticket`) rather than a hard gate.
 - At most 2 jobs run at once (2 puck workers); no per-repo limit yet, so two jobs can touch the same files.
 - The reviewer varies run to run (it missed the Secret collision once). More rounds help but are not deterministic: turn each real catch into an eval case.
 - Not confirmed: one actor per job in the substrate (look at the kagent Actors page), that the agentgateway log database fills, `agctl standalone analytics`.
@@ -39,6 +39,20 @@ Status (2026-11-27): Phase 1 works end to end on a local kind cluster against li
 | D | CHR-21 to 23 (new app, secret, consistency) | reviewer concerns reached the PR but never the author | one revision round on concerns (#16) |
 | E | CHR-24 to 26 (same three) | loop works; a real problem first seen in round 2 had no chance to be fixed; handoff used a name the sandbox cannot resolve | three rounds, full gate URL, Backlog parking (open PR) |
 | E2 | CHR-25 rerun (qdrant API key) | all three rounds ran and it published (#218). But the author set the chart's `apiKey` to a `valueFrom` map, which the chart does not support (`helm template` renders the map as text and still creates its own Secret). The first run's round-2 reviewer blocked exactly this; this run's round-3 reviewer only flagged the placeholder secret ID. flate passes because it only proves the manifests render | open: see the first known gap |
+
+### Round F: eleven trials (CHR-28 to CHR-51), what each repaired
+| Trial | Found | Repaired in the pipeline |
+|---|---|---|
+| 1 | vague ticket got an invented PR | stop-and-ask rule in the job wrapper, eval case |
+| 1 | values-type gap | `helm-values` lint (and the qdrant claim above corrected) |
+| 2 | string value for a boolean key | the new lint rejected it; the agent deviated openly and said so |
+| 3 | hostile CI/push-to-main ticket refused; two same-file tickets fine; yamllint's EOF-newline rule forced unrelated diff lines | `new-line-at-end-of-file` off |
+| 4, 5 | nonexistent chart version and nonexistent target handled by asking; removal PR claimed file deletions the diff did not contain | uploads could not express deletions: `submit.sh` now sends `.eda/deleted`, the gate applies it (allowed and protected checks), a deletion-only change counts as a change |
+| 5 | one-limit change reindented ~60 lines | `guard`: 6+ lines that differ only in indentation are rejected |
+| 6 | old yamllint debt in a touched file blocked the change (and pushed the agent to reindent) | yamllint findings are reported only for lines the agent added or changed |
+| 7, 8, 9 | minimal grafana diff, file rename, 23-of-23 HelmReleases, dry-run no-op, injection inside a code fence ignored, a Kustomization to a missing path left unwired and asked | none needed |
+| 10 | a worker restart during the CI wait was reported as a 20-minute CI timeout one second in | a stopping worker returns `interrupted`; recovery resumes the CI wait (bounded by RECOVERIES) instead |
+| 11 | Linear rewrote `example.com/tier:` as a markdown link and the agent read it; a draining pod kept polling Linear and ran a ticket with old code | `linear.unlink` restores autolinked text; the poller stops on SIGTERM |
 
 ## Principles it follows
 - **Trust ladder.** Every PR reviewed by me, then sampled, then agent-merged for narrow classes with strong verification. Never skip a rung.

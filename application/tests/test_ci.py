@@ -13,6 +13,8 @@ class FakeR:
         if nx and k in self.keys: return None
         self.keys[k] = v; return True
     def rpush(self, *a): pass
+    def lpush(self, *a): pass
+    def hincrby(self, k, f, n): d = self.h.setdefault(k, {}); d[f] = int(d.get(f, 0)) + n; return d[f]
     def zrevrange(self, k, a, b): return ["aaaaaaaaaaaa"]
 import eda, worker
 eda.R = worker.R = FakeR(); EV = []
@@ -124,7 +126,7 @@ setup([{"state": "blind", "total": 16}], []); worker.ci_loop("aaaaaaaaaaaa", JOB
 check(status() == "ci-failed" and "cannot read" in eda.R.hget("job:aaaaaaaaaaaa", "ci") and not calls, "red only in checks the token cannot read: ci-failed with a pointer to the PR, no blind fix round")
 setup([{"state": "none"}], []); worker.ci_loop("aaaaaaaaaaaa", JOB, "https://gh/pull/9")
 check(status() == "published", "no CI at all: published")
-eda.R.h.clear(); eda.R.hset("job:aaaaaaaaaaaa", mapping={"status": "ci-waiting"}); worker.recover()
+eda.R.h.clear(); eda.R.hset("job:aaaaaaaaaaaa", mapping={"status": "ci-waiting", "recoveries": worker.RECOVERIES}); worker.recover()
 check(status() == "published" and "restarted" in eda.R.hget("job:aaaaaaaaaaaa", "ci"), "a worker that died while waiting never reruns the job (no second PR)")
 
 # ---- git: a fix round fast-forwards the existing branch and updates the existing PR

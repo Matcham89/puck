@@ -23,6 +23,7 @@ import eda, linear
 eda.R = FakeR()
 def expect(c, w): print(("PASS " if c else "FAIL ") + w); return c
 
+expect(linear.unlink("Add [example.com/tier:](<http://example.com/tier:>) infra, see [the docs](https://example.com/x) and [a.io](http://a.io/)") == "Add example.com/tier: infra, see [the docs](https://example.com/x) and a.io", "autolinked text is restored, real links are kept")
 ME = "u1"; SVC = {"svc"}
 def issue(**kw):
     i = {"id": "uuid-1", "identifier": "ENG-7", "title": "Bump the nginx image", "description": "Move it to 1.27 in the chart.", "creator": {"id": ME},
@@ -79,4 +80,9 @@ ok6 = expect(len([1 for _, v in muts() if v.get("state") == "s-park"]) == 2, "no
 ok7 = expect(linear.notify({"source": {"type": "jira", "key": "X-1"}, "ticket_key": "X-1"}, "published", "") == "skipped", "notify: skipped for non-linear jobs")
 linear.KEY_FILE = key + ".missing"
 ok8 = expect(linear.notify(job, "published", "") == "skipped", "notify: skipped without a key file")
-sys.exit(0 if all([ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8]) else 1)
+import time
+calls = []; linear.poll_once = lambda: calls.append(1); linear.POLL = 0.01; linear.halt.clear()
+os.path.exists = (lambda orig: lambda p: True if p == linear.KEY_FILE else orig(p))(os.path.exists)
+linear.start(); time.sleep(0.1); linear.halt.set(); time.sleep(0.1); n = len(calls); time.sleep(0.1)
+ok9 = expect(n > 0 and len(calls) == n, "the poller stops polling once the worker is told to stop")
+sys.exit(0 if all([ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9]) else 1)

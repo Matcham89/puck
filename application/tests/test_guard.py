@@ -1,6 +1,6 @@
 """Run in the gate image:  docker run --rm -v $PWD/application/tests:/t --entrypoint python3 -e PYTHONPATH=/app <image> /t/test_guard.py
 The anti-cheating gates: protected CI/lint paths, check suppressions, weakened tests, committed secrets."""
-import os, sys, tempfile, types
+import os, shutil, sys, tempfile, types
 sys.modules["redis"] = types.SimpleNamespace(Redis=types.SimpleNamespace(from_url=lambda *a, **k: None))
 cat = tempfile.mkdtemp() + "/c.json"; open(cat, "w").write("{}"); os.environ["CATALOG"] = cat
 import eda, lint
@@ -33,4 +33,14 @@ check(any("plan/apply" in e for e in g("main.tf", "a = 1\n", 'resource "null_res
 check(not g("main.tf", None, 'data "aws_caller_identity" "me" {}\n'), "ordinary data sources are fine")
 check(not g("notes.md", None, 'data "external" "x" {}\n'), "the rule only applies to Terraform files")
 check(not g("img.bin", None, "\0AKIAABCDEFGHIJKLMNOP"), "binary content is skipped")
+old = "\n".join(f"{' ' * 4}- item{i}: {i}" for i in range(8)) + "\n"
+check(any("indentation" in e for e in g("a.yaml", old, old.replace("    -", "  -"))), "a pure re-indent of many lines is rejected")
+check(not g("a.yaml", old, old.replace("item1:", "item9:").replace("item2:", "item8:")), "a real edit of a few lines is fine")
+old = b"a:\n      b: 1\n"   # 6 spaces: yamllint wants 2 or 4 consistent; old debt
+new = b"a:\n      b: 1\nc: 2\n"
+shutil.rmtree("/tmp/dd", True); os.makedirs("/tmp/dd"); open("/tmp/dd/x.yaml", "wb").write(new)
+errs, _ = lint.run_all("/tmp/dd", ["x.yaml"], ["yaml"], [], {"x.yaml": old})
+check(not errs, f"yamllint findings on lines the agent did not touch are dropped: {errs}")
+errs, _ = lint.run_all("/tmp/dd", ["x.yaml"], ["yaml"], [], {})
+check(errs, "the same file as a new file is still fully linted")
 sys.exit(0 if ok else 1)

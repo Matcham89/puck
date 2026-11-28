@@ -34,4 +34,8 @@ check('"ok": true' in r.stdout, "succeeds after two dropped connections (retries
 print("received", len(got), "bodies; first:", len(got[0]) if got else None, repr(got[0][:12]) if got else None)
 names = sorted(m.name for m in tarfile.open(fileobj=io.BytesIO(got[0]), mode="r:gz").getmembers()) if got else []
 check(names == ["PR.md", "plugins/a/edit.md", "plugins/a/new.md"], f"uploads only changed + new files + PR.md: {names}")
+os.remove(f"{root}/plugins/a/keep.md"); got.clear()
+r = subprocess.run(["sh", f"{root}/.eda/submit.sh"], capture_output=True, text=True)
+tf = tarfile.open(fileobj=io.BytesIO(got[0]), mode="r:gz") if got else None
+check(tf and ".eda/deleted" in tf.getnames() and tf.extractfile(".eda/deleted").read().decode().split() == ["plugins/a/keep.md"], "a file removed since the snapshot is reported as a deletion")
 sys.exit(0 if ok else 1)

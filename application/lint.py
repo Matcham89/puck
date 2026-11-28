@@ -7,7 +7,7 @@ Everything operates on the CHANGED files only, so a repo's old debt never blocks
 """
 import os, re, subprocess
 
-YAMLLINT = "{extends: default, rules: {line-length: disable, document-start: disable, indentation: {spaces: 2, indent-sequences: consistent}, comments: {min-spaces-from-content: 1}, truthy: {check-keys: false}}}"
+YAMLLINT = "{extends: default, rules: {line-length: disable, document-start: disable, new-line-at-end-of-file: disable, indentation: {spaces: 2, indent-sequences: consistent}, comments: {min-spaces-from-content: 1}, truthy: {check-keys: false}}}"
 MAX_LINE = 240
 
 
@@ -117,6 +117,57 @@ def chk_helm(root, changed):
     return errs
 
 
+def _kind(v):
+    if isinstance(v, bool): return "boolean"
+    if isinstance(v, (int, float)): return "number"
+    return "string" if isinstance(v, str) else "map" if isinstance(v, dict) else "list"
+
+
+def type_diffs(vals, defaults, path=""):
+    """Keys a release sets whose type differs from the chart's own default. A null or empty-map default is free-form, so it never conflicts; a list or scalar does."""
+    out = []
+    for k, v in (vals or {}).items():
+        if k not in (defaults or {}) or defaults[k] is None or v is None: continue
+        d, here = defaults[k], f"{path}{k}"
+        if _kind(d) != _kind(v) and not (d == {} and _kind(v) == "map"): out.append(f"{here}: chart default is a {_kind(d)}, the release sets a {_kind(v)}")
+        elif isinstance(v, dict) and isinstance(d, dict): out += type_diffs(v, d, here + ".")
+    return out
+
+
+def chk_helmvalues(root, changed):
+    """A HelmRelease whose values have a different type than the chart's own default for that key (renders fine, then ignores or misuses the setting).
+    The chart's values.yaml (helm show values) is the source of truth. shortcut: a chart that cannot be fetched is skipped, not failed; upgrade if that hides real misses."""
+    import yaml
+    def load(f):
+        try: return [d for d in yaml.safe_load_all(open(os.path.join(root, f), errors="ignore")) if isinstance(d, dict)]
+        except (OSError, yaml.YAMLError): return []
+    repos = {}
+    for d, _, fs in os.walk(root):
+        if ".git" in d.split(os.sep): continue
+        for f in fs:
+            rel = os.path.relpath(os.path.join(d, f), root)
+            if f.endswith((".yaml", ".yml")) and not is_template(rel):
+                for x in load(rel):
+                    if x.get("kind") == "HelmRepository": repos[(x.get("metadata") or {}).get("name")] = x.get("spec") or {}
+    errs = []
+    for f in ext(changed, ".yaml", ".yml"):
+        if is_template(f): continue
+        for x in load(f):
+            if x.get("kind") != "HelmRelease": continue
+            spec = x.get("spec") or {}; cs = (spec.get("chart") or {}).get("spec") or {}; vals = spec.get("values")
+            repo = repos.get((cs.get("sourceRef") or {}).get("name"))
+            if not vals or not repo or not cs.get("chart") or not repo.get("url"): continue
+            oci = repo["url"].startswith("oci://")
+            cmd = ["helm", "show", "values", f"{repo['url'].rstrip('/')}/{cs['chart']}" if oci else cs["chart"]] + ([] if oci else ["--repo", repo["url"]])
+            if cs.get("version"): cmd += ["--version", str(cs["version"])]
+            rc, out = run(cmd, root, timeout=90)
+            if rc: continue
+            try: defaults = yaml.safe_load(out) or {}
+            except yaml.YAMLError: continue
+            errs += lines("helm-values", "\n".join(f"{f}: {cs['chart']} {cs.get('version', '')}: values.{m}" for m in type_diffs(vals, defaults)))
+    return errs
+
+
 def chk_kubernetes(root, changed):
     files = k8s_manifests(root, changed)
     if not files:
@@ -144,7 +195,7 @@ def chk_tflint(root, changed):
 
 
 AUTOFIX = {"terraform-fmt": fix_terraform_fmt}
-CHECKS = {"json": chk_json, "yaml": chk_yaml, "shell": chk_shell, "helm": chk_helm,
+CHECKS = {"json": chk_json, "yaml": chk_yaml, "shell": chk_shell, "helm": chk_helm, "helm-values": chk_helmvalues,
           "kubernetes": chk_kubernetes, "terraform": chk_terraform, "tflint": chk_tflint}
 
 
@@ -167,7 +218,9 @@ def guard(name, old, new):
         return []
     n = new.decode(errors="replace").splitlines(); o = old.decode(errors="replace").splitlines() if old is not None else []
     added = [l for l in n if l not in set(o)]; removed = [l for l in o if l not in set(n)]
-    out = [f"[guard] {name}: adds a check suppression ({l.strip()[:80]}); fix the finding instead of silencing it" for l in added if SUPPRESS.search(l)][:3]
+    rs = {l.strip() for l in removed if l.strip()}; moved = [l for l in added if l.strip() and l.strip() in rs]
+    reindent = [f"[guard] {name}: {len(moved)} lines differ from the original only in indentation (e.g. {moved[0].strip()[:50]!r}); restore the original indentation and change only the lines the task needs"] if len(moved) >= 6 else []
+    out = reindent + [f"[guard] {name}: adds a check suppression ({l.strip()[:80]}); fix the finding instead of silencing it" for l in added if SUPPRESS.search(l)][:3]
     if name.endswith((".tf", ".tf.json")):
         out += [f"[guard] {name}: adds code that runs during plan/apply ({l.strip()[:60]}): `external` data sources and local/remote-exec provisioners are not allowed" for l in added if TFEXEC.search(l)][:3]
     out += [f"[guard] {name}: looks like a committed secret ({k}); credentials never go in a repo" for l in added for k, rx in SECRETS if rx.search(l)][:3]
@@ -176,7 +229,24 @@ def guard(name, old, new):
     return out
 
 
-def run_all(root, changed, checks, autofix):
+YAML_FINDING = re.compile(r"^\[yaml\] (.+?):(\d+):\d+: ")
+
+
+def drop_old_debt(errs, root, base):
+    """A yamllint finding on a line the agent did not add or change is the repo's old debt: it must not block a small change (nor tempt a whole-file reindent).
+    base maps a changed file to its original bytes (None for a new file). Findings on added lines, new files and every other check stay."""
+    out = []
+    for e in errs:
+        m = YAML_FINDING.match(e); old = base.get(m.group(1)) if m else None
+        if old is not None:
+            try: line = open(os.path.join(root, m.group(1)), errors="replace").read().splitlines()[int(m.group(2)) - 1]
+            except (OSError, IndexError): line = None
+            if line is not None and line in set(old.decode(errors="replace").splitlines()): continue
+        out.append(e)
+    return out
+
+
+def run_all(root, changed, checks, autofix, base=None):
     errs, fixed = [], []
     for name in autofix:
         if name not in AUTOFIX:
@@ -188,6 +258,7 @@ def run_all(root, changed, checks, autofix):
         if name not in CHECKS:
             errs.append(f"[config] unknown check {name!r}"); continue
         errs += CHECKS[name](root, changed)
+    errs = drop_old_debt(errs, root, base or {})
     seen, uniq = set(), []
     for e in errs:                      # the same finding from fmt, validate-style and tflint should appear once
         k = e.split("] ", 1)[-1]

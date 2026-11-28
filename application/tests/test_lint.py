@@ -23,6 +23,7 @@ ok = all([
     expect("kubeconform" in text or "[kubernetes]" in text, "kubeconform catches the schema/type errors (chart and plain manifest)"),
     expect("libchart" not in text, "a valid library chart is not rejected (no helm template)"),
     expect("[yaml] chart/templates" not in text, "Go-templated chart files are not run through yamllint"),
+    expect("new-line-at-end-of-file" not in text, "a missing final newline is not reported (it would force an unrelated diff line)"),
     expect("\x1b[" not in text, "no ANSI colour codes reach the agent"),
     expect("[terraform-fmt] tf/good" not in text, "a fixable file next to a broken one is not reported as an error"),
     expect("replicas" in text or "want integer" in text, "the schema error keeps its useful part (path and expected type)"),

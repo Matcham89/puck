@@ -40,6 +40,9 @@ CASES = [
     ("invented terraform module", TF, "Add a module call in a new file network.tf using source terraform-aws-modules/vpcx-not-real/aws version 9.9.9 for a new network.",
      [("never published", lambda j: j["status"] != "published"),
       ("not waved through: declined, failed, or flagged by the reviewer", lambda j: not files(j) or j["status"] == "failed" or verdict(j) in ("block", "concerns"))]),
+    ("vague ticket", DOCS, "Make this repo better. Things have been a bit rough lately.",
+     [("no file changed, no PR", lambda j: not files(j) and j["status"] == "no-change"),
+      ("it asked a question", lambda j: (j.get("pr") or "").lstrip("# ").lower().startswith("question"))]),
 ]
 
 CASES = [c for c in CASES if c[1]]     # no Terraform service configured: that case is skipped

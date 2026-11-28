@@ -77,7 +77,7 @@ All under `secrets/` (git-ignored; keep mode 600):
 ```sh
 sh setup.sh        # prompts for the repos and tokens, writes deployment/kubernetes/app/catalog.json and secrets/*
 ```
-`setup.sh` writes a `puck` entry (self-learning, your fork) plus one entry per target repo; edit the JSON for per-repo detail. Fields: `repo` (`OWNER/REPO`), `base_branch`, `allowed_paths` (the only files the agent may change; `"*"` means the whole repo except `.git/`), `owner`, `lint` checks (`json`, `yaml`, `shell`, `helm`, `kubernetes`, `terraform`, `tflint`, or `playbook` for plugin repos), and an optional `jira` rule. `app/install.sh` loads this file into the cluster; there is no second copy to keep in sync. The `git_token` PAT must cover exactly these repos.
+`setup.sh` writes a `puck` entry (self-learning, your fork) plus one entry per target repo; edit the JSON for per-repo detail. Fields: `repo` (`OWNER/REPO`), `base_branch`, `allowed_paths` (the only files the agent may change; `"*"` means the whole repo except `.git/`), `owner`, `lint` checks (`json`, `yaml`, `shell`, `helm`, `kubernetes`, `terraform`, `tflint`, `helm-values` for Flux HelmReleases, or `playbook` for plugin repos), and an optional `jira` rule. `app/install.sh` loads this file into the cluster; there is no second copy to keep in sync. The `git_token` PAT must cover exactly these repos.
 
 ### 3. Bring it up (local kind)
 ```sh
