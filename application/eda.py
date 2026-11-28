@@ -158,6 +158,7 @@ def diff_of(job, cap=60000):
     """What the agent's change looks like against base (the gate's overlay on a fresh clone), for the independent reviewer."""
     r = f"{DATA}/work/{job['id']}/r"
     sh(["git", "add", "-N", "."], cwd=r); d = sh(["git", "diff", "HEAD", "--no-color"], cwd=r).stdout
+    d = "=== FILES CHANGED (from git; trust these counts) ===\n" + sh(["git", "diff", "HEAD", "--no-color", "--stat=200"], cwd=r).stdout + "\n" + d
     return d[:cap] + (f"\n... diff truncated at {cap} chars ({len(d)} total)" if len(d) > cap else "")
 
 SUBMIT_SH = r"""#!/bin/sh
@@ -170,6 +171,9 @@ while IFS= read -r f; do
   h=$(sha256sum -- "$f" | cut -d' ' -f1)
   grep -qxF -- "$h  $f" .eda/manifest || printf '%s\n' "$f" >> /tmp/eda-changed
 done < /tmp/eda-all
+# files in the snapshot that are gone now are deletions (an overlay of changed files alone cannot say "removed")
+sed 's/^[0-9a-f]*  //' .eda/manifest | grep -vxFf /tmp/eda-all | grep -v '^$' > .eda/deleted
+[ -s .eda/deleted ] && echo .eda/deleted >> /tmp/eda-changed
 tar czf /tmp/eda-submit.tgz -T /tmp/eda-changed || exit 1
 base64 /tmp/eda-submit.tgz > /tmp/eda-submit.b64 || exit 1   # wget --post-file stops at the first NUL byte, so send text, not binary
 for i in 1 2 3; do
@@ -196,7 +200,10 @@ def snapshot(job, restore=False):
             with tarfile.open(last, "r:gz") as tf:
                 for m in tf.getmembers():
                     name = m.name.removeprefix("./")
-                    if m.isfile() and (name == "PR.md" or allowed(name, job)):
+                    if m.isfile() and name == ".eda/deleted":
+                        for gone in tf.extractfile(m).read().decode().splitlines():
+                            if allowed(gone, job) and os.path.isfile(f"{r}/{gone}"): os.remove(f"{r}/{gone}")
+                    elif m.isfile() and (name == "PR.md" or allowed(name, job)):
                         os.makedirs(os.path.dirname(f"{r}/{name}"), exist_ok=True); open(f"{r}/{name}", "wb").write(tf.extractfile(m).read())
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w:gz") as tf: tf.add(r, arcname=".")
@@ -281,13 +288,14 @@ def submit(job, data):
     w = f"{DATA}/work/{job['id']}"; shutil.rmtree(w, ignore_errors=True); os.makedirs(w)
     open(f"{DATA}/work/{job['id']}.last.tgz", "wb").write(data)    # lets a retry restore its work if the sandbox was reset
     fresh_clone(job, f"{w}/r")
-    pr = None; learned = ""; changed = []; bad = []
+    pr = None; learned = ""; changed = []; bad = []; deleted = []; olds = {}
     try: tf = tarfile.open(fileobj=io.BytesIO(data), mode="r:gz"); members = tf.getmembers()
     except (EOFError, tarfile.TarError, OSError) as e:
         return False, f"upload is not a complete .tar.gz ({len(data)} bytes received: {e}). Rebuild the archive and upload it again."
     with tf:
         for m in members:
             name = m.name.removeprefix("./")
+            if name == ".eda/deleted": deleted = tf.extractfile(m).read().decode().splitlines(); continue
             if m.isdir() or name == "" or name.startswith(".eda/"): continue
             if not m.isfile(): return False, f"{name}: only regular files allowed"
             if name == "PR.md": pr = tf.extractfile(m).read().decode(); continue
@@ -296,19 +304,27 @@ def submit(job, data):
             if os.path.exists(dst) and open(dst, "rb").read() == content: continue     # unchanged files are not changes
             if not allowed(name, job): return False, f"{name}: outside allowed paths {job['allowed_paths']}"
             if protected(name, job): return False, f"{name}: protected path (CI and lint config): the agent may not change it. Leave it as it is and describe the change you would make in PR.md"
-            bad += lint.guard(name, open(dst, "rb").read() if os.path.exists(dst) else None, content)
+            old = open(dst, "rb").read() if os.path.exists(dst) else None; olds[name] = old
+            bad += lint.guard(name, old, content)
             os.makedirs(os.path.dirname(dst), exist_ok=True); open(dst, "wb").write(content); changed.append(name)
+    gone = []
+    for name in deleted:
+        dst = f"{w}/r/{name}"
+        if ".." in name.split("/") or name.startswith("/") or not os.path.isfile(dst): continue    # only real files inside the clone
+        if not allowed(name, job): return False, f"{name}: deleting it is outside allowed paths {job['allowed_paths']}"
+        if protected(name, job): return False, f"{name}: protected path (CI and lint config): the agent may not delete it"
+        os.remove(dst); gone.append(name)
     if (job.get("source") or {}).get("type") == "learning": bad += lesson_check(job, f"{w}/r", changed)
     if bad: return False, scrub("\n".join(bad))
     if not pr: return False, "PR.md missing: line 1 is the PR title, the rest is the description (where it went and why)"
     root = f"{w}/r"
     # Deterministic phase, no LLM: formatters fix files in place, linters report. Only reports go back to the agent.
-    errs, fixed = lint.run_all(root, changed, job.get("lint", []), job.get("autofix", []))
+    errs, fixed = lint.run_all(root, changed, job.get("lint", []), job.get("autofix", []), olds)
     if errs: return False, scrub("\n".join(errs[:40]) + (f"\n... and {len(errs) - 40} more" if len(errs) > 40 else ""))
     if "playbook" in job.get("lint", []):
         r = sh(["/usr/local/bin/playbook-check.sh"], cwd=root, env={"PLAYBOOK_DIR": root}, check=False)
         if r.returncode: return False, scrub((r.stdout + r.stderr).strip()[-1500:])
-    R.hset(f"job:{job['id']}", mapping={"validated": hashlib.sha256(data).hexdigest(), "pr": pr, "files": json.dumps(changed), **({"learned": learned} if learned else {}), "title": pr.splitlines()[0].lstrip("# ").strip()[:120] or "(untitled)"})
+    R.hset(f"job:{job['id']}", mapping={"validated": hashlib.sha256(data).hexdigest(), "pr": pr, "files": json.dumps(changed + gone), **({"learned": learned} if learned else {}), "title": pr.splitlines()[0].lstrip("# ").strip()[:120] or "(untitled)"})
     return True, "checks passed" + (f"; auto-formatted: {', '.join(fixed)}" if fixed else "")
 
 def obo_line(job):

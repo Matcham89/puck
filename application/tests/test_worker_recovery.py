@@ -43,6 +43,14 @@ R.delete(worker.LEASE("orphan"))
 for _ in range(2): R.hset("job:orphan", "status", "running"); R.delete(worker.LEASE("orphan")); worker.recover()
 check(R.hget("job:orphan", "status") == "failed" and "retry" in R.hget("job:orphan", "error"), f"after {worker.RECOVERIES} recoveries the job fails instead of looping")
 
+# a worker that stopped while waiting for CI: the wait is resumed (not reported as a timeout, not silently dropped), then falls back to "check the PR"
+R.q.clear(); R.keys.clear(); R.z.clear(); job("cijob", "ci-waiting"); worker.recover()
+check("cijob" in R.q and R.hget("job:cijob", "status") == "ci-waiting", "a ci-waiting job with no lease is queued to resume its CI wait")
+for _ in range(2): R.delete(worker.LEASE("cijob")); worker.recover()
+check(R.hget("job:cijob", "status") == "published" and "check the PR" in R.hget("job:cijob", "ci"), "after repeated restarts it falls back to telling the human to check the PR")
+worker.stop.set(); worker.urllib.request.urlopen = lambda *a, **k: (_ for _ in ()).throw(OSError("blip")); worker.CI_POLL = 0
+check(worker.wait_ci("x") == {"state": "interrupted"}, "a stopping worker reports 'interrupted', not a CI timeout"); worker.stop.clear()
+
 # main loop: lease held while a job runs, released after; SIGTERM stops taking jobs
 R.q.clear(); R.keys.clear(); R.z.clear(); seen = []
 R.q.append("j1"); worker.run = lambda jid: seen.append((jid, R.exists(worker.LEASE(jid))))

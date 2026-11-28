@@ -20,6 +20,7 @@ REVIEW_STATE = os.environ.get("LINEAR_REVIEW_STATE", "In Review")
 PARKED_STATE = os.environ.get("LINEAR_PARKED_STATE", "Backlog")   # failed, no-change and dry-run tickets wait here for a human; Backlog is not "unstarted", so the poller never re-takes them
 START_STATE = os.environ.get("LINEAR_START_STATE", "In Progress")   # by name: a team can have several "started" states (In Review is one)
 POLL = int(os.environ.get("LINEAR_POLL", "60"))
+halt = threading.Event()      # set by the worker on SIGTERM
 
 ISSUES = """query($label: String!) { viewer { id }
   issues(first: 20, filter: {labels: {name: {eq: $label}}, state: {type: {eq: "unstarted"}}}) {
@@ -38,6 +39,14 @@ def gql(query, variables=None):
     return d["data"]
 
 
+AUTOLINK = re.compile(r"\[([^\]\n]+)\]\(<?https?://([^>)\s]+)>?\)")
+
+
+def unlink(text):
+    """Linear turns anything domain-like (`example.com/tier:`, `config.yaml`-style names) into `[text](<http://text>)`: put the plain text back so the agent reads what was typed."""
+    return AUTOLINK.sub(lambda m: m.group(1) if m.group(1).rstrip("/") == m.group(2).rstrip("/") else m.group(0), text)
+
+
 def parse(issue, viewer, services):
     key = issue.get("identifier", "")
     if not re.fullmatch(r"[A-Z][A-Z0-9]+-\d+", key): return {"ignore": f"issue identifier {key!r} is not valid"}
@@ -46,7 +55,7 @@ def parse(issue, viewer, services):
     repo = [l[5:] for l in labels if l.startswith("repo:")]
     if len(repo) != 1 or repo[0] not in services:
         return {"warn": f"I need exactly one label `repo:<name>` naming a configured repo (found {repo or 'none'}; known: {', '.join(sorted(services))}). Fix the label and move the issue back to Todo."}
-    text = jira.clean(f"{issue.get('title') or ''}\n\n{issue.get('description') or ''}"); note = ""
+    text = jira.clean(unlink(f"{issue.get('title') or ''}\n\n{issue.get('description') or ''}")); note = ""
     if len(text) > jira.MAX_INSTRUCTION: text, note = text[:jira.MAX_INSTRUCTION].rstrip(), "truncated"
     if len(text) < 10: return {"ignore": f"{key} has no usable title/description (under 10 characters)"}
     # source.key is the issue's UUID: that is what the write-back needs
@@ -85,10 +94,10 @@ def poll_once():
 def start():
     if not os.path.exists(KEY_FILE): return
     def loop():
-        while True:
+        while not halt.is_set():     # a draining worker must not take new tickets: during a rollout it would run them with the old code
             try: poll_once()
             except Exception as e: print("linear poll failed:", str(e)[:200], flush=True)
-            time.sleep(POLL)
+            halt.wait(POLL)
     threading.Thread(target=loop, daemon=True).start()
 
 

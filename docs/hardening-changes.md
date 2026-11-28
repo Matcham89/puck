@@ -17,6 +17,11 @@ A record of what changed between this repo's earlier state and the Tempo fork (`
 | Per-owner tokens (`secrets/git_token.<owner>`), whole-repo `allowed_paths: ["*"]`, `<TICKET>/<change>` branches | Real repos across owners; one ticket, one branch. |
 | Protected paths (`.github/`, `.buildkite/`, `CODEOWNERS`, lint config); catalog `allow_protected` opts out | The agent must not edit what runs with the repo's secrets or judges its own work. |
 | Guards on added/removed lines: check suppressions, removed test assertions, committed secrets, Terraform `external` data and local/remote-exec | Deterministic anti-cheating; a prompt is advice, a gate is not negotiable. |
+| Deletions: `submit.sh` sends the files that vanished since the snapshot as `.eda/deleted`; the gate applies them after the allowed and protected checks, and a deletion-only change counts as a change | An overlay of changed files cannot say "removed"; a removal PR claimed deletions the diff did not contain. |
+| `guard`: 6+ lines that differ from the original only in indentation are rejected | A one-value change re-indented ~60 lines. |
+| yamllint findings are kept only for lines the agent added or changed (`lint.drop_old_debt`); `new-line-at-end-of-file` is off | Old debt in a touched file blocked small changes and pushed the agent to reformat the whole file. |
+| `helm-values` lint: a HelmRelease value whose type differs from the chart's own default (`helm show values`) is rejected | Renders fine, then the chart ignores or misuses the setting. Commented-out or null chart defaults are not compared; an unfetchable chart is skipped. |
+| The reviewer's diff opens with `git diff --stat` | The reviewer miscounted files (19 vs 23) in two of three rounds. |
 | `lesson_check` for learning jobs: no ticket keys/job ids/other repo names, card <=15 lines, skill <=40 lines, `agent/` under 80% of the knowledge cap | Lessons stay general, short and bounded; the gate loads all of `agent/` into every run and silently truncates past the cap. |
 | `no-change` outcome | A submission with no files (the agent declined or withdrew) is an answer for a human, not a failed publish. Also re-checked after a review revision. |
 | `branch_taken` check before the push | A rerun reuses the branch name; the push was rejected as a bare 500. |
