@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/Matcham89/puck/compare/v0.5.1...v0.5.2) (2026-11-28)
+
+
+### Bug Fixes
+
+* **gate:** round F hardening from 13 live Linear trials ([dff897d](https://github.com/Matcham89/puck/commit/dff897d3fabed0ffd2e356340022447ec54b98d9))
+
 ## [0.5.1](https://github.com/Matcham89/puck/compare/v0.5.0...v0.5.1) (2026-11-27)
 
 
