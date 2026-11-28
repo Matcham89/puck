@@ -63,6 +63,12 @@ R.brpop = brpop_then_term
 worker.main()
 check(seen == [("j1", 1)], "the lease exists while the job runs")
 check(R.exists(worker.LEASE("j1")) == 0, "the lease is released when the job ends")
+# a job that dies with an exception still tells its ticket (it used to stay In Progress, silently)
+R.q.clear(); R.keys.clear(); told = []; R.hset("job:boom", mapping={"status": "running", "job": "{}"}); R.q.append("boom")
+worker.stop.clear(); worker.run = lambda jid: (_ for _ in ()).throw(RuntimeError("branch exists")); worker.jobof = lambda jid: {"id": jid}
+worker.finish = lambda jid, job, state, detail="": told.append((jid, state, detail)); worker.main()
+check(R.hget("job:boom", "status") == "failed" and told == [("boom", "failed", "branch exists")], f"a worker exception is reported to the ticket: {told}")
+worker.stop.set()
 R.q.append("late"); seen.clear(); worker.main()
 check(seen == [], "after SIGTERM (stop set) the worker takes no new job")
 sys.exit(0 if ok else 1)

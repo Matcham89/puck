@@ -53,6 +53,24 @@ Status (2026-11-28): Phase 1 works end to end on a local kind cluster against li
 | 7, 8, 9 | minimal grafana diff, file rename, 23-of-23 HelmReleases, dry-run no-op, injection inside a code fence ignored, a Kustomization to a missing path left unwired and asked | none needed |
 | 10 | a worker restart during the CI wait was reported as a 20-minute CI timeout one second in | a stopping worker returns `interrupted`; recovery resumes the CI wait (bounded by RECOVERIES) instead |
 | 11 | Linear rewrote `example.com/tier:` as a markdown link and the agent read it; a draining pod kept polling Linear and ran a ticket with old code | `linear.unlink` restores autolinked text; the poller stops on SIGTERM |
+| G1 | typo'd chart name resolved, string-for-integer value and a plaintext password stopped with a question, PDB change disclosed its extra replica | none needed |
+| G2 | a five-ticket burst (two workers) produced five minimal single-file PRs | none needed |
+| G2 | a rerun of a published ticket hit its own branch and the job died on the `worker error` path, which never wrote back: the ticket sat In Progress with no comment | worker errors and give-ups after repeated restarts now call `finish`, so the ticket gets the reason and is parked in Backlog (verified live on CHR-58) |
+
+### Input from an external design review (`SRE Agent Pipeline Design Review and Next Steps.md`)
+Taken as proposals to validate, not decisions. Scope here stays one repo (`home-cluster`) on the local kind cluster.
+| Point | Status |
+|---|---|
+| Log retry reasons, then turn recurring ones into deterministic checks (sections 5, 12.1) | Built: `application/evals/reasons.py` tabulates gate rejections, reviewer concerns and CI failures across all jobs in Redis. First read (63 jobs): reviewer concerns are the largest group (about half the jobs), then yamllint rejections (fixed by the old-debt filter). Run it after each round and convert the top reason into a gate |
+| Per-technology constraint sets: Helm, Terraform, Flux/Kustomize, plain YAML (5) | Partly: `helm-values`, kubeconform, tflint exist. A Flux layout check (a Kustomization `path` that exists, `dependsOn` names that exist) is the next candidate, ahead of the router in Phase 2 |
+| Verification evidence on every PR: `helm template` / `kustomize build` before-and-after diff, schema check, policy check (6) | Not built; highest value next step. flate in CI already renders the tree; the gap is attaching the rendered diff to the PR body so review reads evidence, not YAML |
+| State the layer being changed (override vs chart default) in the PR and have the reviewer check it (4) | Not built. Cheap: one line in the job wrapper and one in the reviewer rubric. Two-hop deployments-vs-charts repos do not exist in this setup yet |
+| Eval set from past hand-made fixes, replay and track a pass rate (7) | Partly: `evals/run.py` has 4 dry-run cases. Add the real PRs merged by hand (Renovate-style bumps, removals, the Flux app adds) as cases with expected diffs |
+| Cost and retry counts per ticket (7) | Retries visible via `reasons.py` and `attempts`; cost stays on the Agent Gateway dashboard |
+| Trust tiers: separate agents that read untrusted input from agents that edit infrastructure (8) | Partly: ticket text is already untrusted data, the agent holds no credentials, the gate owns the token and the catalog scopes it to one repo. A separate intake/triage agent is a Phase 2 question |
+| Org-wide repo discovery, multi-repo tickets, one ticket to several PRs (4) | Out of scope until more than one repo is configured; revisit with Phase 2 routing |
+| Spec-first planning before an auto-ticketing orchestrator (9) | Out of scope; applies when the chat agent files tickets |
+| Filesystem MCP instead of git/grep (10) | Not adopted; agrees with the review |
 
 ## Principles it follows
 - **Trust ladder.** Every PR reviewed by me, then sampled, then agent-merged for narrow classes with strong verification. Never skip a rung.

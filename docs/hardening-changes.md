@@ -22,6 +22,8 @@ A record of what changed between this repo's earlier state and the Tempo fork (`
 | yamllint findings are kept only for lines the agent added or changed (`lint.drop_old_debt`); `new-line-at-end-of-file` is off | Old debt in a touched file blocked small changes and pushed the agent to reformat the whole file. |
 | `helm-values` lint: a HelmRelease value whose type differs from the chart's own default (`helm show values`) is rejected | Renders fine, then the chart ignores or misuses the setting. Commented-out or null chart defaults are not compared; an unfetchable chart is skipped. |
 | The reviewer's diff opens with `git diff --stat` | The reviewer miscounted files (19 vs 23) in two of three rounds. |
+| `finish()` also runs on a worker exception and when recovery gives up | A job that died on a publish error never wrote back, so its ticket stayed In Progress with no comment. |
+| `application/evals/reasons.py` | Tabulates why jobs were rejected, reviewed with concerns or failed CI, so a repeated reason becomes a gate. |
 | `lesson_check` for learning jobs: no ticket keys/job ids/other repo names, card <=15 lines, skill <=40 lines, `agent/` under 80% of the knowledge cap | Lessons stay general, short and bounded; the gate loads all of `agent/` into every run and silently truncates past the cap. |
 | `no-change` outcome | A submission with no files (the agent declined or withdrew) is an answer for a human, not a failed publish. Also re-checked after a review revision. |
 | `branch_taken` check before the push | A rerun reuses the branch name; the push was rejected as a bare 500. |

@@ -265,6 +265,8 @@ def recover():
             emit(jid, "queued", f"the worker stopped mid-job; requeued (recovery {n}/{RECOVERIES})", "warn")
         else:
             setf(jid, status="failed", error=f"the worker stopped mid-job {RECOVERIES} times; retry from the UI"); emit(jid, "agent", "giving up after repeated worker restarts", "error")
+            try: finish(jid, jobof(jid), "failed", f"the worker stopped mid-job {RECOVERIES} times")
+            except Exception as e2: print("could not report failure", jid, e2, flush=True)
 
 def resume(jid):
     """Pick up the CI wait of a job whose worker stopped after it opened the PR (the PR and its branch already exist)."""
@@ -282,4 +284,6 @@ def main():
         try: (resume if item[0] == "ci-resume" else run)(jid)
         except Exception as e:
             setf(jid, status="failed", error=str(e)[:500]); emit(jid, "agent", f"worker error: {str(e)[:300]}", "error"); print("job failed", jid, e, flush=True)
+            try: finish(jid, jobof(jid), "failed", str(e)[:300])     # the ticket must hear about it too, or it sits In Progress forever
+            except Exception as e2: print("could not report failure", jid, e2, flush=True)
         finally: done.set(); R.delete(LEASE(jid))
